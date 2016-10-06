@@ -17,7 +17,7 @@ class ExampleItem(QTreeWidgetItem):
     def fromSystemTree(parent, data):
         root = ExampleItem(parent, data)
         for node in sorted(data.children):
-            ExampleItem.fromSystemTree(root, data[node])
+            ExampleItem.fromSystemTree(root, data.getChild(node))
         return root
 
 
