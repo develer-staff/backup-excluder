@@ -8,6 +8,14 @@ def removePrefix(text, prefix):
     return text
 
 
+class BadElementException(Exception):
+    pass
+
+
+class InexistentChildException(Exception):
+    pass
+
+
 class SystemTreeNode:
 
     def __init__(self, name, size=0, parent=None, children=None):
@@ -24,7 +32,7 @@ class SystemTreeNode:
 
     def addChild(self, child):
         if not isinstance(child, SystemTreeNode):
-            raise Exception
+            raise BadElementException()
         self.children[child.name] = child
         child.parent = self
 
@@ -60,8 +68,12 @@ class SystemTreeNode:
                 break
             head, tail = os.path.split(head)
             folders.insert(0, tail)
-        for child in folders:
-            current = current.getChild(child)
+        try:
+            for child in folders:
+                current = current.getChild(child)
+        except KeyError as e:
+            raise InexistentChildException()
+
         return current
 
     @staticmethod
