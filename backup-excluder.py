@@ -3,16 +3,38 @@
 
 import sys
 from PyQt5.QtWidgets import QApplication, QMainWindow, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QHBoxLayout, QPushButton, QWidget, QPlainTextEdit
+from PyQt5.QtGui import QBrush, QColor
 from model import SystemTreeNode
 from scripts.dirsize import humanize_bytes
 import re
 
 
 class ExampleItem(QTreeWidgetItem):
+
+    orangeBrush = QBrush(QColor("orange"))
+    yellowBrush = QBrush(QColor("yellow"))
+    whiteBrush = QBrush(QColor("white"))
+
     def __init__(self, parent, data):
         super().__init__(parent)
         self.setText(0, data.name)
         self.setText(1, humanize_bytes(data.size))
+        data.visibilityChanged.connect(self.update_visibility)
+
+    def update_visibility(self, exclusionState):
+
+        if exclusionState == SystemTreeNode.DIRECTLY_EXCLUDED:
+            self.setBackground(0, self.orangeBrush)
+            self.setBackground(1, self.orangeBrush)
+            # we update all the child because the model won't inspect them
+            for i in range(0, self.childCount()):
+                self.child(i).update_visibility(exclusionState)
+        elif exclusionState == SystemTreeNode.PARTIALLY_INCLUDED:
+            self.setBackground(0, self.yellowBrush)
+            self.setBackground(1, self.yellowBrush)
+        elif exclusionState == SystemTreeNode.FULLY_INCLUDED:
+            self.setBackground(0, self.whiteBrush)
+            self.setBackground(1, self.whiteBrush)
 
     @staticmethod
     def fromSystemTree(parent, data):
