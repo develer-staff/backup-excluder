@@ -31,24 +31,27 @@ class SystemTreeNode:
     def getChild(self, childName):
         return self.children[childName]
 
-    def matchFilter(self, fullPath, filters):
-        for toExclude in filters:
-            if re.match(toExclude, fullPath):
-                return True
-        return False
-
-    def update(self, parentPath, filters):
+    def update(self, parentPath, cutPath):
+        """Computes the size of the subtree rooted in self. The subtree can
+        be pruned by the supplied cutPath function.
+        """
         fullPath = os.path.join(parentPath, self.name)
-        if self.matchFilter(fullPath, filters):
+        if cutPath(fullPath):
             return 0
         elif self.children:
             childrenSum = 0
             for child in self.children.values():
-                childrenSum += child.update(fullPath, filters)
+                childrenSum += child.update(fullPath, cutPath)
             return self.size + childrenSum
         return self.size
 
     def navigateToNode(self, path):
+        """Returns the node reachable following path from the subtree rooted in self.
+
+        The supplied path must not contain the name of node self.
+        It raises a KeyError exception if the path contains non-valid
+        children names.
+        """
         head = path
         folders = []
         current = self
@@ -62,19 +65,8 @@ class SystemTreeNode:
         return current
 
     @staticmethod
-    def createStubTree():
-        root = SystemTreeNode("1", 1, children={
-            "2": SystemTreeNode("2", 2, children={
-                "3": SystemTreeNode("3", 3),
-                "5": SystemTreeNode("5", 5, children={
-                    "6": SystemTreeNode("6", 6)}
-                )}
-            ),
-            "4": SystemTreeNode("4", 4)})
-        return root
-
-    @staticmethod
     def createSystemTree(rootFolder="."):
+        """Create a representation of the file system rooted in rootFolder."""
         import os
         rootPath = os.path.abspath(rootFolder)
         head, tail = os.path.split(rootPath)

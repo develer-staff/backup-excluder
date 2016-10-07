@@ -5,6 +5,7 @@ import sys
 from PyQt5.QtWidgets import QApplication, QMainWindow, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QHBoxLayout, QPushButton, QWidget, QPlainTextEdit
 from model import SystemTreeNode
 from scripts.dirsize import humanize_bytes
+import re
 
 
 class ExampleItem(QTreeWidgetItem):
@@ -67,8 +68,12 @@ class Example(QMainWindow):
         n6 = ExampleItem(n5, self.root.children[0].children[1].children[0])
 
     def applyFilters(self, sender):
-        filters = [x.strip() for x in self.edit.document().toPlainText().split("\n") if x.strip()]
-        finalSize = self.root.update(self.basePath, filters)
+        filters = filter(str.strip, self.edit.document().toPlainText().split("\n"))
+        filterExpr = '(' + '|'.join(filters) + ')'
+        if filterExpr == "()":
+            filterExpr = "^$"
+        cutFunction = re.compile(filterExpr).match
+        finalSize = self.root.update(self.basePath, cutFunction)
         self.statusBar().showMessage("Total sum: " + humanize_bytes(finalSize))
 
 
