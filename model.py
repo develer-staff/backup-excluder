@@ -43,6 +43,10 @@ class SystemTreeNode(QObject):
         self.children[child.name] = child
         self.size += child.size
         child.parent = self
+        sup = self.parent
+        while sup and isinstance(sup, SystemTreeNode):
+            sup.size += child.size
+            sup = sup.parent
 
     def getChild(self, childName):
         return self.children[childName]
