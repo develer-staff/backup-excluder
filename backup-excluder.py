@@ -12,9 +12,11 @@ import re
 class ExampleItem(QTreeWidgetItem):
 
     percentFormat = "{:.1%}"
-    orangeBrush = QBrush(QColor("orange"))
-    yellowBrush = QBrush(QColor("yellow"))
-    whiteBrush = QBrush(QColor("white"))
+    brushes = {
+        SystemTreeNode.DIRECTLY_EXCLUDED: QBrush(QColor("orange")),
+        SystemTreeNode.PARTIALLY_INCLUDED: QBrush(QColor("yellow")),
+        SystemTreeNode.FULLY_INCLUDED: QBrush(QColor("white"))
+    }
 
     def __init__(self, parent, data):
         super().__init__(parent)
@@ -33,18 +35,12 @@ class ExampleItem(QTreeWidgetItem):
         self.setBackground(3, brush)
 
     def _update_visibility(self, exclusionState, actualSize):
-        theBrush = None
         ratio = float(actualSize)/max([self.uncutSize, 1.0])
         if exclusionState == SystemTreeNode.DIRECTLY_EXCLUDED:
-            theBrush = self.orangeBrush
             # we update all the children because the model won't inspect them
             for i in range(0, self.childCount()):
                 self.child(i)._update_visibility(exclusionState, 0)
-        elif exclusionState == SystemTreeNode.PARTIALLY_INCLUDED:
-            theBrush = self.yellowBrush
-        elif exclusionState == SystemTreeNode.FULLY_INCLUDED:
-            theBrush = self.whiteBrush
-        self._colorBackground(theBrush)
+        self._colorBackground(self.brushes[exclusionState])
         self.setText(1, humanize_bytes(actualSize))
         self.setText(2, ExampleItem.percentFormat.format(ratio))
 
