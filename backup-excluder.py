@@ -20,13 +20,10 @@ class ExampleItem(QTreeWidgetItem):
         super().__init__(parent)
         self.setText(0, data.name)
         self.uncutSize = data.size
-        if self.uncutSize > 0:
-            # Update the size of parents. Folder's size is 0 by default,
-            # this way it accounts for the files it contains.
-            sup = self.parent()
-            while sup and isinstance(sup, ExampleItem):
-                sup.uncutSize += self.uncutSize
-                sup = sup.parent()
+        self.setText(1, humanize_bytes(self.uncutSize))
+        self.setText(2, ExampleItem.percentFormat.format(100))
+        self.setText(3, humanize_bytes(self.uncutSize))
+
         data.visibilityChanged.connect(self._update_visibility)
 
     def _colorBackground(self, brush):
@@ -56,11 +53,6 @@ class ExampleItem(QTreeWidgetItem):
         root = ExampleItem(parent, data)
         for node in sorted(data.children):
             ExampleItem.fromSystemTree(root, data.getChild(node))
-        # Update here the display of the size because we need to complete
-        # the subtree roted in root before showing its uncutSize
-        root.setText(1, humanize_bytes(root.uncutSize))
-        root.setText(2, ExampleItem.percentFormat.format(100))
-        root.setText(3, humanize_bytes(root.uncutSize))
         return root
 
 
@@ -75,6 +67,7 @@ class Example(QMainWindow):
         self.tree.setColumnCount(4)
         self.tree.setHeaderLabels(["File System", "Size", "%", "Uncut Size"])
         self.tree.header().resizeSection(0, 250)
+        # self.basePath, self.root = SystemTreeNode.createSystemTree(basePath)
         self.basePath, self.root = SystemTreeNode.createSystemTree(basePath)
         ExampleItem.fromSystemTree(self.tree, self.root)
 

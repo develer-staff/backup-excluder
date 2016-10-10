@@ -31,38 +31,42 @@ class SystemTreeNode(QObject):
         self.name = name
         self.size = size
         self.parent = parent
-        if children:
-            self.children = children
-        else:
-            self.children = {}
+        if not children:
+            children = {}
+        self.children = children
         for child in self.children.values():
-            child.parent = self
+            self.addChild(child)
 
     def addChild(self, child):
         if not isinstance(child, SystemTreeNode):
             raise BadElementException()
         self.children[child.name] = child
+        self.size += child.size
         child.parent = self
 
     def getChild(self, childName):
         return self.children[childName]
 
     def _update(self, parentPath, cutPath):
-        """Computes the size of the subtree rooted in self. The subtree can
-        be pruned by the supplied cutPath function.
+        """Computes the size of the subtree rooted in self. The subtree
+        can be pruned by the supplied cutPath function. It also
+        returns a flag showing wether the the cutPath function matched
+        at least one element inside the whole subtree.
         """
         fullPath = os.path.join(parentPath, self.name)
         if cutPath(fullPath):
             self.visibilityChanged.emit(self.DIRECTLY_EXCLUDED, 0)
             return (True, 0)
         elif self.children:
-            childrenSum = 0
+            # We are in a dir node: do not consider the size of the
+            # node (which is the size of the uncut subtree). We must
+            # compute it again based on its subtree AND cutPath
+            subtreeSize = 0
             prunedSubtree = False
             for child in self.children.values():
                 isPruned, childSize = child._update(fullPath, cutPath)
-                childrenSum += child.update(fullPath, cutPath)
+                subtreeSize += child.update(fullPath, cutPath)
                 prunedSubtree |= isPruned
-            subtreeSize = self.size + childrenSum
             if prunedSubtree:
                 self.visibilityChanged.emit(self.PARTIALLY_INCLUDED, subtreeSize)
             else:
@@ -74,47 +78,39 @@ class SystemTreeNode(QObject):
     def update(self, parentPath, cutPath):
         return self._update(parentPath, cutPath)[1]
 
-    def navigateToNode(self, path):
-        """Returns the node reachable following path from the subtree rooted in self.
-
-        The supplied path must not contain the name of node self.
-        It raises a KeyError exception if the path contains non-valid
-        children names.
+    @staticmethod
+    def _createSystemTreeRecursive(rootPath):
+        """Recursivly create a SystemTreeNode tree depicting
+        the file system footed in rootPath.
         """
-        head = path
-        folders = []
-        current = self
-        while head:
-            if head == os.sep:
-                break
-            head, tail = os.path.split(head)
-            folders.insert(0, tail)
-        try:
-            for child in folders:
-                current = current.getChild(child)
-        except KeyError as e:
-            raise InexistentChildException()
-
-        return current
+        # rootFolder must be an absolute path
+        head, tail = os.path.split(rootPath)
+        currentRoot = SystemTreeNode(tail)
+        for root, dirs, files, rootfd in os.fwalk(rootPath):
+            while dirs:
+                # Important: remove dir from dirs, so that fwalk will not
+                # inspect it in this recursion!
+                folder = dirs.pop()
+                dirPath = os.path.join(rootPath, folder)
+                dirChild = SystemTreeNode._createSystemTreeRecursive(dirPath)
+                currentRoot.addChild(dirChild)
+            for file in files:
+                try:
+                    child = SystemTreeNode(file, os.stat(file, dir_fd=rootfd).st_size)
+                    currentRoot.addChild(child)
+                except EnvironmentError as err:
+                    print("WARNING: {} in {}".format(err, root))
+        return currentRoot
 
     @staticmethod
     def createSystemTree(rootFolder="."):
-        """Create a representation of the file system rooted in rootFolder."""
-        import os
+        """Returns a representation of the file system rooted in
+        rootFolder as a SystemTreeNode tree and the prefix of the
+        rootFolder in the file system.
+        """
         rootPath = os.path.abspath(rootFolder)
         head, tail = os.path.split(rootPath)
-        rootNode = SystemTreeNode(tail)
-        for root, dirs, files, rootfd in os.fwalk(rootPath):
-            partialPath = removePrefix(root, rootPath)
-            current = rootNode.navigateToNode(partialPath)
-            for folder in dirs:
-                current.addChild(SystemTreeNode(folder))
-            for file in files:
-                try:
-                    current.addChild(SystemTreeNode(file, os.stat(file, dir_fd=rootfd).st_size))
-                except EnvironmentError as err:
-                    print("WARNING: {} in {}".format(err, root))
-        return (head, rootNode)
+        return (head, SystemTreeNode._createSystemTreeRecursive(rootPath))
 
     def printSubtree(self):
         current = self
