@@ -23,7 +23,7 @@ class SystemTreeNode(QObject):
     PARTIALLY_INCLUDED = 1
     DIRECTLY_EXCLUDED = 2
 
-    visibilityChanged = pyqtSignal(int)
+    visibilityChanged = pyqtSignal(int, int)
 
     def __init__(self, name, size=0, parent=None, children=None):
         super().__init__()
@@ -53,7 +53,7 @@ class SystemTreeNode(QObject):
         """
         fullPath = os.path.join(parentPath, self.name)
         if cutPath(fullPath):
-            self.visibilityChanged.emit(self.DIRECTLY_EXCLUDED)
+            self.visibilityChanged.emit(self.DIRECTLY_EXCLUDED, 0)
             return (True, 0)
         elif self.children:
             childrenSum = 0
@@ -62,12 +62,13 @@ class SystemTreeNode(QObject):
                 isPruned, childSize = child._update(fullPath, cutPath)
                 childrenSum += child.update(fullPath, cutPath)
                 prunedSubtree |= isPruned
+            subtreeSize = self.size + childrenSum
             if prunedSubtree:
-                self.visibilityChanged.emit(self.PARTIALLY_INCLUDED)
+                self.visibilityChanged.emit(self.PARTIALLY_INCLUDED, subtreeSize)
             else:
-                self.visibilityChanged.emit(self.FULLY_INCLUDED)
-            return (prunedSubtree, self.size + childrenSum)
-        self.visibilityChanged.emit(self.FULLY_INCLUDED)
+                self.visibilityChanged.emit(self.FULLY_INCLUDED, subtreeSize)
+            return (prunedSubtree, subtreeSize)
+        self.visibilityChanged.emit(self.FULLY_INCLUDED, self.size)
         return (False, self.size)
 
     def update(self, parentPath, cutPath):
