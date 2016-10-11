@@ -23,8 +23,7 @@ class SystemTreeNode(QObject):
     PARTIALLY_INCLUDED = 1
     DIRECTLY_EXCLUDED = 2
 
-    # need float because int can overflow
-    visibilityChanged = pyqtSignal(int, float)
+    visibilityChanged = pyqtSignal(int, "long long")
 
     def __init__(self, name, size=0, parent=None, children=None):
         super().__init__()
