@@ -2,9 +2,9 @@
 # -*- coding: utf-8 -*-
 
 import sys
-from PyQt5.QtWidgets import QApplication, QMainWindow, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QPushButton, QWidget, QPlainTextEdit, QSplitter
+from PyQt5.QtWidgets import QApplication, QMainWindow, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QPushButton, QWidget, QPlainTextEdit, QSplitter, QTextEdit
 from PyQt5.QtGui import QBrush, QColor
-from model import SystemTreeNode
+from model import SystemTreeNode, removePrefix
 from scripts.dirsize import humanize_bytes
 import re
 
@@ -66,10 +66,15 @@ class Example(QMainWindow):
         # self.basePath, self.root = SystemTreeNode.createSystemTree(basePath)
         self.basePath, self.root = SystemTreeNode.createSystemTree(basePath)
         ExampleItem.fromSystemTree(self.tree, self.root)
+        self._listen_for_excluded_paths(self.root)
 
         v1 = QVBoxLayout()
         v1.addWidget(self.tree)
         self.edit = QPlainTextEdit()
+        self.edit.setPlaceholderText("Write your filter. Regex accepted.")
+        self.output = QTextEdit()
+        self.output.setReadOnly(True)
+        self.output.setPlaceholderText("No path matched")
         self.confirm = QPushButton("apply filters")
         self.confirm.clicked.connect(self.applyFilters)
         leftPane = QWidget()
@@ -78,6 +83,7 @@ class Example(QMainWindow):
         v2 = QVBoxLayout()
         v2.addWidget(self.confirm)
         v2.addWidget(self.edit)
+        v2.addWidget(self.output)
         v2.addStretch(1)
         rightPane = QWidget()
         rightPane.setLayout(v2)
@@ -95,6 +101,15 @@ class Example(QMainWindow):
         # Update tree view with default filters
         self.applyFilters(None)
 
+    def _manageExcludedPath(self, newPath):
+        #print(newPath)
+        self.output.append(removePrefix(newPath, self.basePath))
+
+    def _listen_for_excluded_paths(self, root):
+        root.excludedPathFound.connect(self._manageExcludedPath)
+        for child in root.children.values():
+            self._listen_for_excluded_paths(child)
+
     def initStubTree(self):
         n1 = ExampleItem(self.tree, self.root)
         n2 = ExampleItem(n1, self.root.children[0])
@@ -109,6 +124,7 @@ class Example(QMainWindow):
         if filterExpr == "()":
             filterExpr = "^$"
         cutFunction = re.compile(filterExpr).match
+        self.output.document().clear()
         finalSize = self.root.update(self.basePath, cutFunction)
         self.statusBar().showMessage("Total sum: " + humanize_bytes(finalSize))
 
