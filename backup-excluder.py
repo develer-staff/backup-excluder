@@ -23,7 +23,7 @@ class ExampleItem(QTreeWidgetItem):
         self.setText(0, data.name)
         self.uncutSize = data.size
         self.setText(1, humanize_bytes(self.uncutSize))
-        self.setText(2, ExampleItem.percentFormat.format(100))
+        self.setText(2, ExampleItem.percentFormat.format(1))
         self.setText(3, humanize_bytes(self.uncutSize))
 
         data.visibilityChanged.connect(self._update_visibility)
@@ -36,13 +36,13 @@ class ExampleItem(QTreeWidgetItem):
 
     def _update_visibility(self, exclusionState, actualSize):
         ratio = float(actualSize)/max([self.uncutSize, 1.0])
+        self._colorBackground(self.brushes[exclusionState])
+        self.setText(1, humanize_bytes(actualSize))
+        self.setText(2, ExampleItem.percentFormat.format(ratio))
         if exclusionState == SystemTreeNode.DIRECTLY_EXCLUDED:
             # we update all the children because the model won't inspect them
             for i in range(0, self.childCount()):
                 self.child(i)._update_visibility(exclusionState, 0)
-        self._colorBackground(self.brushes[exclusionState])
-        self.setText(1, humanize_bytes(actualSize))
-        self.setText(2, ExampleItem.percentFormat.format(ratio))
 
     @staticmethod
     def fromSystemTree(parent, data):
@@ -92,8 +92,10 @@ class Example(QMainWindow):
         self.setCentralWidget(splitter)
         self.setGeometry(10, 100, 800, 600)
         self.show()
-        # Update tree view with default filters
-        self.applyFilters(None)
+        self._show_total_sum(self.root.size)
+
+    def _show_total_sum(self, bytes):
+        self.statusBar().showMessage("Total sum: " + humanize_bytes(bytes))
 
     def initStubTree(self):
         n1 = ExampleItem(self.tree, self.root)
@@ -110,7 +112,7 @@ class Example(QMainWindow):
             filterExpr = "^$"
         cutFunction = re.compile(filterExpr).match
         finalSize = self.root.update(self.basePath, cutFunction)
-        self.statusBar().showMessage("Total sum: " + humanize_bytes(finalSize))
+        self._show_total_sum(finalSize)
 
 
 def main():

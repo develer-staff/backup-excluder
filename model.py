@@ -23,7 +23,8 @@ class SystemTreeNode(QObject):
     PARTIALLY_INCLUDED = 1
     DIRECTLY_EXCLUDED = 2
 
-    visibilityChanged = pyqtSignal(int, int)
+    # need float because int can overflow
+    visibilityChanged = pyqtSignal(int, float)
 
     def __init__(self, name, size=0, parent=None, children=None):
         super().__init__()
@@ -31,6 +32,7 @@ class SystemTreeNode(QObject):
         self.name = name
         self.size = size
         self.parent = parent
+        self.lastState = self.FULLY_INCLUDED
         if not children:
             children = {}
         self.children = children
@@ -51,36 +53,91 @@ class SystemTreeNode(QObject):
     def getChild(self, childName):
         return self.children[childName]
 
+    def _set_exclusion_state_recursive(self, exclusionState):
+        self.lastState = exclusionState
+        for child in self.children.values():
+            child._set_exclusion_state_recursive(exclusionState)
+
     def _update(self, parentPath, cutPath):
-        """Computes the size of the subtree rooted in self. The subtree
-        can be pruned by the supplied cutPath function. It also
-        returns a flag showing wether the the cutPath function matched
-        at least one element inside the whole subtree.
+        """Computes the size of the subtree rooted in self.
+        The subtree can be pruned by the supplied cutPath function.
+        It also returns a boolean flag telling whether the state of
+        the subtree is changed (some node have been pruned or de-pruned).
         """
         fullPath = os.path.join(parentPath, self.name)
         if cutPath(fullPath):
-            self.visibilityChanged.emit(self.DIRECTLY_EXCLUDED, 0)
-            return (True, 0)
+            if self.lastState != self.DIRECTLY_EXCLUDED:
+                # We update the state of each node of the subtree
+                # WITHOUT emitting a signal for each node: only for the
+                # root. The GUI must take care of correctly display
+                # the pruned subtree.
+                # FIXME: we assume the regular expression do not
+                # use exclusion sintax, e.g., [^a-z]
+                self._set_exclusion_state_recursive(self.DIRECTLY_EXCLUDED)
+                self.visibilityChanged.emit(self.DIRECTLY_EXCLUDED, 0)
+                return (True, 0)
+            return (False, 0)
         elif self.children:
             # We are in a dir node: do not consider the size of the
             # node (which is the size of the uncut subtree). We must
-            # compute it again based on its subtree AND cutPath
+            # compute it again based on its subtree AND cutPath.
             subtreeSize = 0
-            prunedSubtree = False
+            subtreeChanged = False
             for child in self.children.values():
                 isPruned, childSize = child._update(fullPath, cutPath)
-                subtreeSize += child.update(fullPath, cutPath)
-                prunedSubtree |= isPruned
-            if prunedSubtree:
-                self.visibilityChanged.emit(self.PARTIALLY_INCLUDED, subtreeSize)
-            else:
-                self.visibilityChanged.emit(self.FULLY_INCLUDED, subtreeSize)
-            return (prunedSubtree, subtreeSize)
-        self.visibilityChanged.emit(self.FULLY_INCLUDED, self.size)
+                subtreeSize += childSize
+                subtreeChanged |= isPruned
+            if subtreeChanged:
+                # Little hack: if the subtree changed because a node
+                # has matched the filter, then the visibility must update
+                # accordingly. However, subtree can change also because
+                # no more nodes match the filter (e.g., a filter is removed)
+                # and in this case the view must reset the color. Comparing
+                # the original size of the node with the size of the subtree
+                # is the little hack to understand whether to reset the
+                # view color!
+                if self.size == subtreeSize:
+                    self.visibilityChanged.emit(self.FULLY_INCLUDED, subtreeSize)
+                else:
+                    self.visibilityChanged.emit(self.PARTIALLY_INCLUDED, subtreeSize)
+            return (subtreeChanged, subtreeSize)
+        if self.lastState != self.FULLY_INCLUDED:
+            self.lastState = self.FULLY_INCLUDED
+            self.visibilityChanged.emit(self.FULLY_INCLUDED, self.size)
+            return (True, self.size)
         return (False, self.size)
 
     def update(self, parentPath, cutPath):
         return self._update(parentPath, cutPath)[1]
+
+    @staticmethod
+    def _createSystemTreeRecursive2(rootPath):
+        """Recursivly create a SystemTreeNode tree depicting
+        the file system footed in rootPath.
+        """
+        # rootFolder must be an absolute path
+        head, tail = os.path.split(rootPath)
+        currentRoot = SystemTreeNode(tail)
+        try:
+            for root, dirs, files, rootfd in os.fwalk(rootPath):
+                while dirs:
+                    # Important: remove dir from dirs, so that fwalk will not
+                    # inspect it in this recursion!
+                    folder = dirs.pop()
+                    dirPath = os.path.join(rootPath, folder)
+                    dirChild = SystemTreeNode._createSystemTreeRecursive2(dirPath)
+                    currentRoot.addChild(dirChild)
+                for file in files:
+                    try:
+                        child = SystemTreeNode(file, os.stat(file, dir_fd=rootfd,  follow_symlinks=False).st_size)
+                        currentRoot.addChild(child)
+                    except EnvironmentError as err:
+                        print("WARNING: {} in {}".format(err, root))
+        except PermissionError as err:
+            print("WARNING 2: {} in {}".format(err, rootPath))
+            currentRoot.name = "XXX" + currentRoot.name
+            pass
+        return currentRoot
 
     @staticmethod
     def _createSystemTreeRecursive(rootPath):
@@ -90,20 +147,13 @@ class SystemTreeNode(QObject):
         # rootFolder must be an absolute path
         head, tail = os.path.split(rootPath)
         currentRoot = SystemTreeNode(tail)
-        for root, dirs, files, rootfd in os.fwalk(rootPath):
-            while dirs:
-                # Important: remove dir from dirs, so that fwalk will not
-                # inspect it in this recursion!
-                folder = dirs.pop()
-                dirPath = os.path.join(rootPath, folder)
-                dirChild = SystemTreeNode._createSystemTreeRecursive(dirPath)
+        for entry in os.scandir(rootPath):
+            if entry.is_dir(follow_symlinks=False):
+                dirChild = SystemTreeNode._createSystemTreeRecursive(entry.path)
                 currentRoot.addChild(dirChild)
-            for file in files:
-                try:
-                    child = SystemTreeNode(file, os.stat(file, dir_fd=rootfd).st_size)
-                    currentRoot.addChild(child)
-                except EnvironmentError as err:
-                    print("WARNING: {} in {}".format(err, root))
+            elif entry.is_file(follow_symlinks=False):
+                child = SystemTreeNode(entry.name, entry.stat().st_size)
+                currentRoot.addChild(child)
         return currentRoot
 
     @staticmethod
@@ -114,7 +164,8 @@ class SystemTreeNode(QObject):
         """
         rootPath = os.path.abspath(rootFolder)
         head, tail = os.path.split(rootPath)
-        return (head, SystemTreeNode._createSystemTreeRecursive(rootPath))
+        root = SystemTreeNode._createSystemTreeRecursive(rootPath)
+        return (head, root)
 
     def printSubtree(self):
         current = self
