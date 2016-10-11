@@ -3,60 +3,67 @@
 
 import unittest
 import re
-from model import SystemTreeNode, BadElementException, InexistentChildException
+from model import SystemTreeNode, BadElementException
 
 
 class TestSystemTreeNode(unittest.TestCase):
 
     def setUp(self):
-        self.root = SystemTreeNode("1", 1, children={
-            "2": SystemTreeNode("2", 2, children={
-                "3": SystemTreeNode("3", 3),
-                "5": SystemTreeNode("5", 5, children={
-                    "6": SystemTreeNode("6", 6)
+        # Leaf nodes have size != 0
+        # Internal nodes have size == 0 ... their size will
+        # be updated when children are inserted
+        self.root = SystemTreeNode("10", 0, children={
+            "6": SystemTreeNode("6", 0, children={
+                "1": SystemTreeNode("1", 1),
+                "5": SystemTreeNode("5", 0, children={
+                    "2": SystemTreeNode("2", 2),
+                    "3": SystemTreeNode("3", 3)
                 })
             }),
             "4": SystemTreeNode("4", 4)})
 
-    def test_addChild(self):
+    def _test_addChild_params(self, parent, child):
+        self.assertEqual(child.parent, parent)
+        self.assertTrue(child.name in parent.children)
+        self.assertEqual(parent.children[child.name], child)
+
+    def test_addChild_to_root(self):
         aNode = SystemTreeNode("aNode", 2)
         self.root.addChild(aNode)
-        self.assertEqual(aNode.parent, self.root)
-        self.assertTrue(aNode.name in self.root.children)
-        self.assertEqual(self.root.children[aNode.name], aNode)
+        self._test_addChild_params(self.root, aNode)
+        self.assertEqual(self.root.size, 12)
+
+    def test_addChild_near_leaf(self):
+        aNode = SystemTreeNode("aNode", 10)
+        n5 = self.root.getChild("6").getChild("5")
+        n5.addChild(aNode)
+        self._test_addChild_params(n5, aNode)
+        self.assertEqual(n5.size, 15)
+        self.assertEqual(n5.parent.size, 16)
+        self.assertEqual(self.root.size, 20)
+
+    def test_addChild_add_tree(self):
+        tree = SystemTreeNode("60", 0, children={
+            "10": SystemTreeNode("10", 10),
+            "20": SystemTreeNode("20", 20),
+            "30": SystemTreeNode("30", 30)
+            })
+        n5 = self.root.getChild("6").getChild("5")
+        n5.addChild(tree)
+        self._test_addChild_params(n5, tree)
+        self.assertEqual(n5.size, 65)
+        self.assertEqual(n5.parent.size, 66)
+        self.assertEqual(self.root.size, 70)
+
+    def test_addChild_fake(self):
         fakeNode = {'name': 'bNode', 'size': 1}
         with self.assertRaises(BadElementException):
             self.root.addChild(fakeNode)
 
-    def test_navigateToNode_existing_node(self):
-        n1 = self.root
-        n2 = self.root.getChild("2")
-        n3 = self.root.getChild("2").getChild("3")
-        n5 = self.root.getChild("2").getChild("5")
-        self.assertEqual(n1.navigateToNode("/2/3"), n3)
-        self.assertEqual(n1.navigateToNode("2/3"), n3)
-        self.assertEqual(n2.navigateToNode("/5"), n5)
-        self.assertEqual(n2.navigateToNode("5"), n5)
-
-    def test_navigateToNode_nonexisting_node(self):
-        with self.assertRaises(InexistentChildException):
-            self.root.navigateToNode("bad/node/from/start")
-        with self.assertRaises(InexistentChildException):
-            self.root.navigateToNode("2/3/bad/node")
-
-    def test_navigateToNode_bad_path(self):
-        with self.assertRaises(InexistentChildException):
-            self.root.navigateToNode("/1/2/3")
-        with self.assertRaises(InexistentChildException):
-            self.root.navigateToNode("/2/3/")
-        n5 = self.root.getChild("2").getChild("5")
-        with self.assertRaises(InexistentChildException):
-            n5.navigateToNode("/2/3")
-
     def test_update_mock_regex(self):
         # ignore cutFunction
         fullsize = self.root.update("", lambda x: False)
-        self.assertEqual(fullsize, 21)
+        self.assertEqual(fullsize, 10)
         nosize = self.root.update("", lambda x: True)
         self.assertEqual(nosize, 0)
 
@@ -67,21 +74,21 @@ class TestSystemTreeNode(unittest.TestCase):
 
     def test_update_valid_regex(self):
         # supply cutFunction matching a leaf node
-        expectedResult = 21 - 6
-        self._test_perform_update_with_regex(self.root, "", "1/2/5/6",
+        expectedResult = 10 - 2
+        self._test_perform_update_with_regex(self.root, "", "10/6/5/2",
                                              expectedResult)
         # supply cutFunction matching a inner node
-        expectedResult = 21 - (2 + 3 + 5 + 6)
-        self._test_perform_update_with_regex(self.root, "", "1/2",
+        expectedResult = 10 - (1 + 2 + 3)
+        self._test_perform_update_with_regex(self.root, "", "10/6",
                                              expectedResult)
 
     def test_update_parent_path(self):
         # supply an invalid parentPath
         self._test_perform_update_with_regex(self.root, "invalid/parent/path",
-                                             "1/2", 21)
+                                             "10/6", 10)
         # supply a valid parentPath
-        startingNode = self.root.getChild("2").getChild("5")
-        self._test_perform_update_with_regex(startingNode, "1/2", "1/2/5/6", 5)
+        startingNode = self.root.getChild("6").getChild("5")
+        self._test_perform_update_with_regex(startingNode, "10/6", "10/6/5/3", 2)
 
 
 if __name__ == '__main__':
