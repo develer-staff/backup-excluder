@@ -64,6 +64,7 @@ class Example(QMainWindow):
     def customInit(self, initialPath):
         self.basePath = ""
         self.root = None
+        self.totalNodes = 0
 
         self.tree = QTreeWidget()
         self.tree.setColumnCount(4)
@@ -161,16 +162,20 @@ class Example(QMainWindow):
     def _notifyStatus(self, message):
         self.statusBar().showMessage(message)
 
+    def _notifyBackupStatus(self, finalSize, usedNodes):
+        self._notifyStatus("Backup size: {} (using {}/{} nodes)".format(
+            humanize_bytes(finalSize), usedNodes, self.totalNodes))
+
     def _createSystemTree(self, initialPath):
         self._notifyStatus("Please wait...reading file system. It may take a while.")
         self.tree.setEnabled(False)
         self.output.setEnabled(False)
         self.tree.clear()
-        self.basePath, self.root = SystemTreeNode.createSystemTree(initialPath)
+        self.basePath, self.root, self.totalNodes = SystemTreeNode.createSystemTree(initialPath)
         ExampleItem.fromSystemTree(self.tree, self.root)
         self._update_basePath(self.basePath)
         self._listen_for_excluded_paths(self.root)
-        self._notifyStatus("Backup sum: " + humanize_bytes(self.root.size))
+        self._notifyBackupStatus(self.root.size, self.totalNodes)
         self.tree.setEnabled(True)
         self.output.setEnabled(True)
 
@@ -236,8 +241,8 @@ class Example(QMainWindow):
             filterExpr = "^$"
         cutFunction = re.compile(filterExpr).match
         self.output.document().clear()
-        finalSize = self.root.update(self.basePath, cutFunction)
-        self._notifyStatus("Backup sum: " + humanize_bytes(finalSize))
+        finalSize, nodesCount = self.root.update(self.basePath, cutFunction)
+        self._notifyBackupStatus(finalSize, nodesCount)
 
 
 def main():
