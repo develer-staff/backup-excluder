@@ -166,11 +166,15 @@ class Example(QMainWindow):
         self._notifyStatus("Backup size: {} (using {}/{} nodes)".format(
             humanize_bytes(finalSize), usedNodes, self.totalNodes))
 
+    def _clear_filters_list(self):
+        self.edit.clear()
+
     def _createSystemTree(self, initialPath):
         self._notifyStatus("Please wait...reading file system. It may take a while.")
         self.tree.setEnabled(False)
         self.output.setEnabled(False)
         self.tree.clear()
+        self._clear_filters_list()
         self.basePath, self.root, self.totalNodes = SystemTreeNode.createSystemTree(initialPath)
         ExampleItem.fromSystemTree(self.tree, self.root)
         self._update_basePath(self.basePath)
