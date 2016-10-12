@@ -62,25 +62,32 @@ class Example(QMainWindow):
         self.customInit(initialPath)
 
     def customInit(self, initialPath):
+        self.basePath = ""
+        self.root = None
+
         self.tree = QTreeWidget()
         self.tree.setColumnCount(4)
         self.tree.setHeaderLabels(["File System", "Size", "%", "Uncut Size"])
         self.tree.header().resizeSection(0, 250)
-        self.basePath, self.root = SystemTreeNode.createSystemTree(initialPath)
-        ExampleItem.fromSystemTree(self.tree, self.root)
-        self._listen_for_excluded_paths(self.root)
+
         self.output = QTextEdit()
         self.output.setReadOnly(True)
         self.output.setPlaceholderText("No path matched")
 
-        self.edit = QPlainTextEdit()
-        self.edit.setPlaceholderText("No filters")
-        self.confirm = QPushButton("apply filters")
-        self.confirm.clicked.connect(self.applyFilters)
-        self.infolabel = QLabel("Filters list. Regex accepted: matching starts from the root path.")
+        self.rootFolderDisplay = QLabel()
+
+        self.infolabel = QLabel("""<strong>Filters list</strong><br/>
+            Regex accepted: <em>matching starts from the root path</em>.""")
         self.infolabel.setWordWrap(True)
 
+        self.edit = QPlainTextEdit()
+        self.edit.setPlaceholderText("No filters")
+
+        self.confirm = QPushButton("apply filters")
+        self.confirm.clicked.connect(self.applyFilters)
+
         v1 = QVBoxLayout()
+        v1.addWidget(self.rootFolderDisplay)
         v1.addWidget(self.tree)
         v1.addWidget(self.output)
         leftPane = QWidget()
@@ -107,6 +114,8 @@ class Example(QMainWindow):
         self.setGeometry(10, 100, 800, 600)
         self.treeview.trigger()
         self.show()
+
+        self._createSystemTree(initialPath)
         # Update tree view with default filters
         self.applyFilters(None)
 
@@ -146,6 +155,9 @@ class Example(QMainWindow):
         self.treeview = treeviewAction
         self.listview = listviewAction
 
+    def _update_basePath(self, path):
+        self.rootFolderDisplay.setText("root path: <strong>" + path + "</strong>")
+
     def _notifyStatus(self, message):
         self.statusBar().showMessage(message)
 
@@ -156,6 +168,7 @@ class Example(QMainWindow):
         self.tree.clear()
         self.basePath, self.root = SystemTreeNode.createSystemTree(initialPath)
         ExampleItem.fromSystemTree(self.tree, self.root)
+        self._update_basePath(self.basePath)
         self._listen_for_excluded_paths(self.root)
         self._notifyStatus("Backup sum: " + humanize_bytes(self.root.size))
         self.tree.setEnabled(True)
@@ -171,7 +184,6 @@ class Example(QMainWindow):
                 self._notifyStatus("Only one folder can be selected as root.")
                 return False
             self._createSystemTree(newRootFolder[0])
-            print(self.basePath)
             return True
         return False
 
