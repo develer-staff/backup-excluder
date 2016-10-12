@@ -5,7 +5,7 @@ import sys
 import re
 import os
 
-from PyQt5.QtWidgets import QApplication, QMainWindow, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QPushButton, QWidget, QPlainTextEdit, QSplitter, QTextEdit, QAction, QToolBar, QFileDialog
+from PyQt5.QtWidgets import QApplication, QMainWindow, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QPushButton, QWidget, QPlainTextEdit, QSplitter, QTextEdit, QAction, QToolBar, QFileDialog, QLabel
 from PyQt5.QtGui import QBrush, QColor, QIcon
 
 from model import SystemTreeNode, removePrefix
@@ -72,13 +72,13 @@ class Example(QMainWindow):
         self.output = QTextEdit()
         self.output.setReadOnly(True)
         self.output.setPlaceholderText("No path matched")
-        self.tree.setVisible(False)
-        self.output.setVisible(True)
 
         self.edit = QPlainTextEdit()
-        self.edit.setPlaceholderText("Write your filter. Regex accepted.")
+        self.edit.setPlaceholderText("No filters")
         self.confirm = QPushButton("apply filters")
         self.confirm.clicked.connect(self.applyFilters)
+        self.infolabel = QLabel("Filters list. Regex accepted: matching starts from the root path.")
+        self.infolabel.setWordWrap(True)
 
         v1 = QVBoxLayout()
         v1.addWidget(self.tree)
@@ -87,8 +87,9 @@ class Example(QMainWindow):
         leftPane.setLayout(v1)
 
         v2 = QVBoxLayout()
-        v2.addWidget(self.confirm)
+        v2.addWidget(self.infolabel)
         v2.addWidget(self.edit)
+        v2.addWidget(self.confirm)
         v2.addStretch(1)
         rightPane = QWidget()
         rightPane.setLayout(v2)
@@ -104,6 +105,7 @@ class Example(QMainWindow):
         self.statusBar()
         self.setCentralWidget(splitter)
         self.setGeometry(10, 100, 800, 600)
+        self.treeview.trigger()
         self.show()
         # Update tree view with default filters
         self.applyFilters(None)
@@ -123,11 +125,11 @@ class Example(QMainWindow):
         refreshAction.triggered.connect(self._refreshFileSystem)
 
         treeviewIcon = QIcon.fromTheme("format-justify-left")
-        treeviewAction = QAction(treeviewIcon, "File system tree view", self)
+        treeviewAction = QAction(treeviewIcon, "File system tree view", self, checkable=True)
         treeviewAction.triggered.connect(self._showTreeView)
 
         listviewIcon = QIcon.fromTheme("document-print-preview")
-        listviewAction = QAction(listviewIcon, "Excluded paths list view", self)
+        listviewAction = QAction(listviewIcon, "Excluded paths list view", self, checkable=True)
         listviewAction.triggered.connect(self._showListView)
 
         manageToolBar = QToolBar()
@@ -141,15 +143,23 @@ class Example(QMainWindow):
         self.addToolBar(manageToolBar)
         self.addToolBar(viewToolBar)
         self.insertToolBarBreak(manageToolBar)
+        self.treeview = treeviewAction
+        self.listview = listviewAction
 
-    def _notifyStatys(self, message):
+    def _notifyStatus(self, message):
         self.statusBar().showMessage(message)
 
     def _createSystemTree(self, initialPath):
+        self._notifyStatus("Please wait...reading file system. It may take a while.")
+        self.tree.setEnabled(False)
+        self.output.setEnabled(False)
         self.tree.clear()
         self.basePath, self.root = SystemTreeNode.createSystemTree(initialPath)
         ExampleItem.fromSystemTree(self.tree, self.root)
         self._listen_for_excluded_paths(self.root)
+        self._notifyStatus("Backup sum: " + humanize_bytes(self.root.size))
+        self.tree.setEnabled(True)
+        self.output.setEnabled(True)
 
     def _selectRootFolder(self):
         fileDialog = QFileDialog(self)
@@ -181,10 +191,14 @@ class Example(QMainWindow):
     def _showTreeView(self):
         self.tree.setVisible(True)
         self.output.setVisible(False)
+        self.treeview.setChecked(True)
+        self.listview.setChecked(False)
 
     def _showListView(self):
         self.tree.setVisible(False)
         self.output.setVisible(True)
+        self.treeview.setChecked(False)
+        self.listview.setChecked(True)
 
     def _manageExcludedPath(self, newPath):
         self.output.append(removePrefix(newPath, self.basePath))
@@ -203,6 +217,7 @@ class Example(QMainWindow):
         n6 = ExampleItem(n5, self.root.children[0].children[1].children[0])
 
     def applyFilters(self, sender):
+        self._notifyStatus("Please wait...applying filters.")
         filters = filter(str.strip, self.edit.document().toPlainText().split("\n"))
         filterExpr = '(' + '|'.join(filters) + ')'
         if filterExpr == "()":
@@ -210,7 +225,7 @@ class Example(QMainWindow):
         cutFunction = re.compile(filterExpr).match
         self.output.document().clear()
         finalSize = self.root.update(self.basePath, cutFunction)
-        self.statusBar().showMessage("Backup sum: " + humanize_bytes(finalSize))
+        self._notifyStatus("Backup sum: " + humanize_bytes(finalSize))
 
 
 def main():

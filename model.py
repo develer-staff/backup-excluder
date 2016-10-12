@@ -92,20 +92,23 @@ class SystemTreeNode(QObject):
         # rootFolder must be an absolute path
         head, tail = os.path.split(rootPath)
         currentRoot = SystemTreeNode(tail)
-        for root, dirs, files, rootfd in os.fwalk(rootPath):
-            while dirs:
-                # Important: remove dir from dirs, so that fwalk will not
-                # inspect it in this recursion!
-                folder = dirs.pop()
-                dirPath = os.path.join(rootPath, folder)
-                dirChild = SystemTreeNode._createSystemTreeRecursive(dirPath)
-                currentRoot.addChild(dirChild)
-            for file in files:
-                try:
-                    child = SystemTreeNode(file, os.stat(file, dir_fd=rootfd).st_size)
-                    currentRoot.addChild(child)
-                except EnvironmentError as err:
-                    print("WARNING: {} in {}".format(err, root))
+        try:
+            for root, dirs, files, rootfd in os.fwalk(rootPath):
+                while dirs:
+                    # Important: remove dir from dirs, so that fwalk will not
+                    # inspect it in this recursion!
+                    folder = dirs.pop()
+                    dirPath = os.path.join(rootPath, folder)
+                    dirChild = SystemTreeNode._createSystemTreeRecursive(dirPath)
+                    currentRoot.addChild(dirChild)
+                for file in files:
+                    try:
+                        child = SystemTreeNode(file, os.stat(file, dir_fd=rootfd, follow_symlinks=False).st_size)
+                        currentRoot.addChild(child)
+                    except EnvironmentError as err:
+                        print("WARNING: {} in {}".format(err, root))
+        except OSError as err:
+            print("WARNING: {} in {}".format(err, rootPath))
         return currentRoot
 
     @staticmethod
