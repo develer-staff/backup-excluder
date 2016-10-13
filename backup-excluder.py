@@ -65,6 +65,7 @@ class Example(QMainWindow):
         self.basePath = ""
         self.root = None
         self.totalNodes = 0
+        self.matchRoot = False
 
         self.tree = QTreeWidget()
         self.tree.setColumnCount(4)
@@ -78,8 +79,11 @@ class Example(QMainWindow):
         self.rootFolderDisplay = QLabel()
 
         self.infolabel = QLabel("""<strong>Filters list</strong><br/>
-            Regex accepted: <em>matching starts from the root path</em>.""")
+            Regex accepted<br/>""")
         self.infolabel.setWordWrap(True)
+        self.matchRootLabel = QLabel("<span style='color:red'><em>Matching starts from the root path</em></span>")
+        self.matchRootLabel.setWordWrap(True)
+        self.matchRootLabel.setVisible(self.matchRoot)
 
         self.edit = QPlainTextEdit()
         self.edit.setPlaceholderText("No filters")
@@ -96,6 +100,7 @@ class Example(QMainWindow):
 
         v2 = QVBoxLayout()
         v2.addWidget(self.infolabel)
+        v2.addWidget(self.matchRootLabel)
         v2.addWidget(self.edit)
         v2.addWidget(self.confirm)
         v2.addStretch(1)
@@ -134,18 +139,23 @@ class Example(QMainWindow):
         refreshAction = QAction(refreshIcon, "Refresh from file system", self)
         refreshAction.triggered.connect(self._refreshFileSystem)
 
-        treeviewIcon = QIcon.fromTheme("format-justify-left")
+        treeviewIcon = QIcon.fromTheme("format-indent-more")
         treeviewAction = QAction(treeviewIcon, "File system tree view", self, checkable=True)
         treeviewAction.triggered.connect(self._showTreeView)
 
-        listviewIcon = QIcon.fromTheme("document-print-preview")
+        listviewIcon = QIcon.fromTheme("format-justify-fill")
         listviewAction = QAction(listviewIcon, "Excluded paths list view", self, checkable=True)
         listviewAction.triggered.connect(self._showListView)
+
+        matchFromRootIcon = QIcon.fromTheme("tools-check-spelling")
+        matchFromRootAction = QAction(matchFromRootIcon, "Match also root path", self, checkable=True)
+        matchFromRootAction.triggered.connect(self._toggle_match_root)
 
         manageToolBar = QToolBar()
         manageToolBar.addAction(openAction)
         manageToolBar.addAction(saveAction)
         manageToolBar.addAction(refreshAction)
+        manageToolBar.addAction(matchFromRootAction)
         viewToolBar = QToolBar()
         viewToolBar.addAction(treeviewAction)
         viewToolBar.addAction(listviewAction)
@@ -222,6 +232,12 @@ class Example(QMainWindow):
         self.treeview.setChecked(False)
         self.listview.setChecked(True)
 
+    def _toggle_match_root(self):
+        self.matchRoot = not self.matchRoot
+        self.matchRootLabel.setVisible(self.matchRoot)
+        matching = "" if self.matchRoot else "NOT "
+        self._notifyStatus("Switched to "+matching+"match root path. Views are NOT updated. Apply filters again.")
+
     def _manageExcludedPath(self, newPath):
         self.output.append(removePrefix(newPath, self.basePath))
 
@@ -246,7 +262,8 @@ class Example(QMainWindow):
             filterExpr = "^$"
         cutFunction = re.compile(filterExpr).match
         self.output.document().clear()
-        finalSize, nodesCount = self.root.update(self.basePath, cutFunction)
+        base = self.basePath if self.matchRoot else ""
+        finalSize, nodesCount = self.root.update(base, cutFunction)
         self._notifyBackupStatus(finalSize, nodesCount)
 
 
