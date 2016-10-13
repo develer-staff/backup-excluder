@@ -166,15 +166,16 @@ class Example(QMainWindow):
         self._notifyStatus("Backup size: {} (using {}/{} nodes)".format(
             humanize_bytes(finalSize), usedNodes, self.totalNodes))
 
-    def _clear_filters_list(self):
+    def _clear_widgets(self):
         self.edit.clear()
+        self.tree.clear()
+        self.output.clear()
 
     def _createSystemTree(self, initialPath):
         self._notifyStatus("Please wait...reading file system. It may take a while.")
         self.tree.setEnabled(False)
         self.output.setEnabled(False)
-        self.tree.clear()
-        self._clear_filters_list()
+        self._clear_widgets()
         self.basePath, self.root, self.totalNodes = SystemTreeNode.createSystemTree(initialPath)
         ExampleItem.fromSystemTree(self.tree, self.root)
         self._update_basePath(self.basePath)
@@ -197,7 +198,7 @@ class Example(QMainWindow):
         return False
 
     def _saveToFile(self):
-        fileName = QFileDialog.getSaveFileName(
+        fileName, fileExtension = QFileDialog.getSaveFileName(
             self, "Save excluded paths list", "",
             "Paths excluded list (*.pel);;All Files (*)")
         if not fileName:
