@@ -1,7 +1,5 @@
 import os
 
-from PyQt5.QtCore import pyqtSignal, QObject
-
 
 def removePrefix(text, prefix):
     if text.startswith(prefix):
@@ -13,14 +11,11 @@ class BadElementException(Exception):
     pass
 
 
-class SystemTreeNode(QObject):
+class SystemTreeNode(object):
 
     FULLY_INCLUDED = 0
     PARTIALLY_INCLUDED = 1
     DIRECTLY_EXCLUDED = 2
-
-    visibilityChanged = pyqtSignal(int, "long long")
-    excludedPathFound = pyqtSignal(str)
 
     def __init__(self, name, size=0, parent=None, children=None):
         super().__init__()
@@ -29,6 +24,8 @@ class SystemTreeNode(QObject):
         self.size = size
         self.parent = parent
         self.lastState = self.FULLY_INCLUDED
+        self.excludedPathFoundHandler = None
+        self.visibilityChangedHandler = None
         if not children:
             children = {}
         self.children = children
@@ -49,6 +46,14 @@ class SystemTreeNode(QObject):
     def getChild(self, childName):
         return self.children[childName]
 
+    def _excludedPathFound(self, path):
+        if self.excludedPathFoundHandler is not None:
+            self.excludedPathFoundHandler(path)
+
+    def _visibilityChanged(self, newStatus, newSize):
+        if self.visibilityChangedHandler is not None:
+            self.visibilityChangedHandler(newStatus, newSize)
+
     def _set_exclusion_state_recursive(self, exclusionState):
         self.lastState = exclusionState
         for child in self.children.values():
@@ -63,7 +68,7 @@ class SystemTreeNode(QObject):
         """
         fullPath = os.path.join(parentPath, self.name)
         if cutPath(fullPath):
-            self.excludedPathFound.emit(fullPath)
+            self._excludedPathFound(fullPath)
             if self.lastState != self.DIRECTLY_EXCLUDED:
                 # We update the state of each node of the subtree
                 # WITHOUT emitting a signal for each node: only for the
@@ -72,7 +77,7 @@ class SystemTreeNode(QObject):
                 # FIXME: we assume the regular expression do not
                 # use exclusion sintax, e.g., [^a-z]
                 self._set_exclusion_state_recursive(self.DIRECTLY_EXCLUDED)
-                self.visibilityChanged.emit(self.DIRECTLY_EXCLUDED, 0)
+                self._visibilityChanged(self.DIRECTLY_EXCLUDED, 0)
                 return (True, 0, 0)
             return (False, 0, 0)
         elif self.children:
@@ -97,13 +102,13 @@ class SystemTreeNode(QObject):
                 # is the little hack to understand whether to reset the
                 # view color!
                 if self.size == subtreeSize:
-                    self.visibilityChanged.emit(self.FULLY_INCLUDED, subtreeSize)
+                    self._visibilityChanged(self.FULLY_INCLUDED, subtreeSize)
                 else:
-                    self.visibilityChanged.emit(self.PARTIALLY_INCLUDED, subtreeSize)
+                    self._visibilityChanged(self.PARTIALLY_INCLUDED, subtreeSize)
             return (subtreeChanged, subtreeSize, subtreeNodes)
         if self.lastState != self.FULLY_INCLUDED:
             self.lastState = self.FULLY_INCLUDED
-            self.visibilityChanged.emit(self.FULLY_INCLUDED, self.size)
+            self._visibilityChanged(self.FULLY_INCLUDED, self.size)
             return (True, self.size, 1)
         return (False, self.size, 1)
 

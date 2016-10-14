@@ -62,33 +62,37 @@ class TestSystemTreeNode(unittest.TestCase):
 
     def test_update_mock_regex(self):
         # ignore cutFunction
-        fullsize = self.root.update("", lambda x: False)
+        fullsize, nodesCount = self.root.update("", lambda x: False)
         self.assertEqual(fullsize, 10)
-        nosize = self.root.update("", lambda x: True)
+        self.assertEqual(nodesCount, 7)
+        nosize, nodesCount = self.root.update("", lambda x: True)
         self.assertEqual(nosize, 0)
+        self.assertEqual(nodesCount, 0)
 
     def _test_perform_update_with_regex(self, node, parentPath,
-                                        regex, expectedResult):
-        result = node.update(parentPath, re.compile(regex).match)
-        self.assertEqual(result, expectedResult)
+                                        regex, expectedSize, expectedNodes):
+        result, nodes = node.update(parentPath, re.compile(regex).match)
+        self.assertEqual(result, expectedSize)
+        self.assertEqual(nodes, expectedNodes)
 
     def test_update_valid_regex(self):
         # supply cutFunction matching a leaf node
         expectedResult = 10 - 2
         self._test_perform_update_with_regex(self.root, "", "10/6/5/2",
-                                             expectedResult)
+                                             expectedResult, 6)
         # supply cutFunction matching a inner node
         expectedResult = 10 - (1 + 2 + 3)
         self._test_perform_update_with_regex(self.root, "", "10/6",
-                                             expectedResult)
+                                             expectedResult, 2)
 
     def test_update_parent_path(self):
         # supply an invalid parentPath
         self._test_perform_update_with_regex(self.root, "invalid/parent/path",
-                                             "10/6", 10)
+                                             "10/6", 10, 7)
         # supply a valid parentPath
         startingNode = self.root.getChild("6").getChild("5")
-        self._test_perform_update_with_regex(startingNode, "10/6", "10/6/5/3", 2)
+        self._test_perform_update_with_regex(startingNode, "10/6", "10/6/5/3",
+                                             2 ,2)
 
 
 if __name__ == '__main__':

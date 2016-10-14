@@ -28,8 +28,7 @@ class ExampleItem(QTreeWidgetItem):
         self.setText(1, humanize_bytes(self.uncutSize))
         self.setText(2, ExampleItem.percentFormat.format(1))
         self.setText(3, humanize_bytes(self.uncutSize))
-
-        data.visibilityChanged.connect(self._update_visibility)
+        data.visibilityChangedHandler = self._update_visibility
 
     def _colorBackground(self, brush):
         self.setBackground(0, brush)
@@ -194,7 +193,7 @@ class Example(QMainWindow):
     def _selectRootFolder(self):
         fileDialog = QFileDialog(self)
         fileDialog.setFileMode(QFileDialog.DirectoryOnly)
-        newRootFolder = "/home"
+        newRootFolder = ""
         if fileDialog.exec():
             newRootFolder = fileDialog.selectedFiles()
             if len(newRootFolder) != 1:
@@ -239,7 +238,7 @@ class Example(QMainWindow):
         self.output.append(removePrefix(newPath, self.basePath))
 
     def _listen_for_excluded_paths(self, root):
-        root.excludedPathFound.connect(self._manageExcludedPath)
+        root.excludedPathFoundHandler = self._manageExcludedPath
         for child in root.children.values():
             self._listen_for_excluded_paths(child)
 
