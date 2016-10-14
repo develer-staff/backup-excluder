@@ -86,7 +86,7 @@ class SystemTreeNode(QObject):
                 isPruned, childSize = child._update(fullPath, cutPath)
                 subtreeSize += childSize
                 subtreeChanged |= isPruned
-            if subtreeChanged:
+            if subtreeChanged or self.lastState == self.DIRECTLY_EXCLUDED:
                 # Little hack: if the subtree changed because a node
                 # has matched the filter, then the visibility must update
                 # accordingly. However, subtree can change also because
