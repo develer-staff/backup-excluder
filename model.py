@@ -106,8 +106,10 @@ class SystemTreeNode(object):
                 # is the little hack to understand whether to reset the
                 # view color!
                 if self.size == subtreeSize:
+                    self.lastState = self.FULLY_INCLUDED
                     self._visibilityChanged(self.FULLY_INCLUDED, subtreeSize)
                 else:
+                    self.lastState = self.PARTIALLY_INCLUDED
                     self._visibilityChanged(self.PARTIALLY_INCLUDED, subtreeSize)
             return (subtreeChanged, subtreeSize, subtreeNodes)
         if self.lastState != self.FULLY_INCLUDED:

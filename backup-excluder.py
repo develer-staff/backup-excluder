@@ -4,12 +4,22 @@
 import sys
 import re
 import os
+import threading
 
-from PyQt5.QtWidgets import QApplication, QMainWindow, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QPushButton, QWidget, QPlainTextEdit, QSplitter, QTextEdit, QAction, QToolBar, QFileDialog, QLabel
+from PyQt5.QtWidgets import QApplication, QMainWindow, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QPushButton, QWidget, QPlainTextEdit, QSplitter, QTextEdit, QAction, QToolBar, QFileDialog, QLabel, QApplication
 from PyQt5.QtGui import QBrush, QColor, QIcon
+from PyQt5.QtCore import QThread, QObject, pyqtSignal, QCoreApplication
 
 from model import SystemTreeNode, removePrefix
 from scripts.dirsize import humanize_bytes
+
+
+count = 0
+def hack_for_reactive_gui():
+    global count
+    count += 1
+    if not (count & 0x3F):
+        QCoreApplication.processEvents()
 
 
 class ExampleItem(QTreeWidgetItem):
@@ -45,16 +55,48 @@ class ExampleItem(QTreeWidgetItem):
             # we update all the children because the model won't inspect them
             for i in range(0, self.childCount()):
                 self.child(i)._update_visibility(exclusionState, 0)
+        QCoreApplication.processEvents()
 
     @staticmethod
     def fromSystemTree(parent, data):
+        hack_for_reactive_gui()
         root = ExampleItem(parent, data)
         for node in sorted(data.children):
             ExampleItem.fromSystemTree(root, data.getChild(node))
         return root
 
 
+class WorkerThread(threading.Thread):
+    def __init__(self, mainThread, initialPath):
+        super().__init__()
+        self.mainThread = mainThread
+        self.initialPath = initialPath
+
+    def run(self):
+        workerObject = WorkerObject(self.mainThread)
+        workerObject.moveToThread(QApplication.instance().thread())
+        workerObject.workFinished.connect(self.mainThread._createSystemTreeAsyncEnd)
+        workerObject.doWork(self.initialPath)
+        return
+
+
+class WorkerObject(QObject):
+    workFinished = pyqtSignal()
+
+    def __init__(self, parent):
+        super().__init__(None)
+        self.mainThread = parent
+
+    def doWork(self, initialPath):
+        a, b, c = SystemTreeNode.createSystemTree(initialPath)
+        self.mainThread.basePath = a
+        self.mainThread.root = b
+        self.mainThread.totalNodes = c
+        self.workFinished.emit()
+
+
 class Example(QMainWindow):
+    startWork = pyqtSignal(str)
 
     def __init__(self, initialPath):
         super().__init__()
@@ -188,8 +230,9 @@ class Example(QMainWindow):
         self.open.setEnabled(enabled)
         self.save.setEnabled(enabled)
 
-
     def _createSystemTree(self, initialPath):
+        self._createSystemTreeAsyncStart(initialPath)
+        return
         self._notifyStatus("Please wait...reading file system. It may take a while.")
         self._setOutputEnabled(False)
         del self.root
@@ -198,6 +241,21 @@ class Example(QMainWindow):
         ExampleItem.fromSystemTree(self.tree, self.root)
         self._update_basePath(self.basePath)
         self._listen_for_excluded_paths(self.root)
+        self._notifyBackupStatus(self.root.size, self.totalNodes)
+        self._setOutputEnabled(True)
+
+    def _createSystemTreeAsyncStart(self, initialPath):
+        self._notifyStatus("Please wait...reading file system. It may take a while.")
+        self._setOutputEnabled(False)
+        del self.root
+        self._clear_widgets()
+        worker = WorkerThread(self, initialPath)
+        worker.start()
+
+    def _createSystemTreeAsyncEnd(self):
+        ExampleItem.fromSystemTree(self.tree, self.root)
+        self._listen_for_excluded_paths(self.root)
+        self._update_basePath(self.basePath)
         self._notifyBackupStatus(self.root.size, self.totalNodes)
         self._setOutputEnabled(True)
 
