@@ -1,4 +1,5 @@
 import os
+import weakref
 
 
 def removePrefix(text, prefix):
@@ -22,7 +23,10 @@ class SystemTreeNode(object):
         # self.name is redoundant since it is the key inside parent.children
         self.name = name
         self.size = size
-        self.parent = parent
+        if parent is not None:
+            self.parent = weakref.ref(parent)
+        else:
+            self.parent = None
         self.lastState = self.FULLY_INCLUDED
         self.excludedPathFoundHandler = None
         self.visibilityChangedHandler = None
@@ -37,11 +41,11 @@ class SystemTreeNode(object):
             raise BadElementException()
         self.children[child.name] = child
         self.size += child.size
-        child.parent = self
+        child.parent = weakref.ref(self)
         sup = self.parent
-        while sup and isinstance(sup, SystemTreeNode):
-            sup.size += child.size
-            sup = sup.parent
+        while sup and isinstance(sup(), SystemTreeNode):
+            sup().size += child.size
+            sup = sup().parent
 
     def getChild(self, childName):
         return self.children[childName]
@@ -181,9 +185,9 @@ class SystemTreeNode(object):
     def printSubtree(self):
         current = self
         result = ""
-        while current.parent:
+        while current.parent():
             result += ">"
-            current = current.parent
+            current = current.parent()
         result += "(" + str(self.name) + ")"
         print(result)
         for node in self.children.values():

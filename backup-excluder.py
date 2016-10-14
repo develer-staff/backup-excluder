@@ -161,6 +161,9 @@ class Example(QMainWindow):
         self.insertToolBarBreak(manageToolBar)
         self.treeview = treeviewAction
         self.listview = listviewAction
+        self.save = saveAction
+        self.open = openAction
+        self.refresh = refreshAction
 
     def _update_basePath(self, path):
         self.rootFolderDisplay.setText("root path: <strong>" + path + "</strong>")
@@ -177,18 +180,26 @@ class Example(QMainWindow):
         self.tree.clear()
         self.output.clear()
 
+    def _setOutputEnabled(self, enabled):
+        self.tree.setEnabled(enabled)
+        self.output.setEnabled(enabled)
+        self.confirm.setEnabled(enabled)
+        self.refresh.setEnabled(enabled)
+        self.open.setEnabled(enabled)
+        self.save.setEnabled(enabled)
+
+
     def _createSystemTree(self, initialPath):
         self._notifyStatus("Please wait...reading file system. It may take a while.")
-        self.tree.setEnabled(False)
-        self.output.setEnabled(False)
+        self._setOutputEnabled(False)
+        del self.root
         self._clear_widgets()
         self.basePath, self.root, self.totalNodes = SystemTreeNode.createSystemTree(initialPath)
         ExampleItem.fromSystemTree(self.tree, self.root)
         self._update_basePath(self.basePath)
         self._listen_for_excluded_paths(self.root)
         self._notifyBackupStatus(self.root.size, self.totalNodes)
-        self.tree.setEnabled(True)
-        self.output.setEnabled(True)
+        self._setOutputEnabled(True)
 
     def _selectRootFolder(self):
         fileDialog = QFileDialog(self)
