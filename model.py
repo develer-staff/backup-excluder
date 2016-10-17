@@ -31,20 +31,34 @@ class SystemTreeNode(object):
         """
         super().__init__()
         # self.name is redoundant since it is the key inside parent.children
-        self.name = name
-        self.size = size
+        self._name = name
+        self._subtreeTotalSize = size
         if parent is not None:
-            self.parent = weakref.ref(parent)
+            parent = weakref.ref(parent)
         else:
-            self.parent = None
-        self.lastState = self.FULLY_INCLUDED
+            parent = lambda: None
+        self._parent = parent
+        self._currentExclusionState = self.FULLY_INCLUDED
         self.excludedPathFoundHandler = None
         self.visibilityChangedHandler = None
         if not children:
             children = {}
-        self.children = children
-        for child in self.children.values():
+        self._children = children
+        for child in self._children.values():
             self.addChild(child)
+
+    @property
+    def name(self):
+        return self._name
+    @property
+    def subtreeTotalSize(self):
+        return self._subtreeTotalSize
+    @property
+    def parent(self):
+        return self._parent()
+    @property
+    def children(self):
+        return self._children
 
     def addChild(self, child):
         """ Add a child to the specified node.
@@ -55,13 +69,13 @@ class SystemTreeNode(object):
         """
         if not isinstance(child, SystemTreeNode):
             raise BadElementException()
-        self.children[child.name] = child
-        self.size += child.size
-        child.parent = weakref.ref(self)
+        self._children[child.name] = child
+        self._subtreeTotalSize += child._subtreeTotalSize
+        child._parent = weakref.ref(self)
         sup = self.parent
-        while sup and isinstance(sup(), SystemTreeNode):
-            sup().size += child.size
-            sup = sup().parent
+        while isinstance(sup, SystemTreeNode):
+            sup._subtreeTotalSize += child._subtreeTotalSize
+            sup = sup.parent
 
     def getChild(self, childName):
         """ Get the child with the specifed name.
@@ -70,7 +84,7 @@ class SystemTreeNode(object):
         is found.
         """
         try:
-            child = self.children[childName]
+            child = self._children[childName]
         except KeyError as e:
             raise BadElementException()
         return child
@@ -94,7 +108,7 @@ class SystemTreeNode(object):
 
         No events/callback are raised.
         """
-        self.lastState = exclusionState
+        self._currentExclusionState = exclusionState
         for child in self.children.values():
             child._set_exclusion_state_recursive(exclusionState)
 
@@ -110,7 +124,7 @@ class SystemTreeNode(object):
         fullPath = os.path.join(parentPath, self.name)
         if cutPath(fullPath):
             self._excludedPathFound(fullPath)
-            if self.lastState != self.DIRECTLY_EXCLUDED:
+            if self._currentExclusionState != self.DIRECTLY_EXCLUDED:
                 # This node must be cut -> all the subtree will be cut:
                 # update the state of the whole subtree without calling
                 # the callback for every node. The GUI must take care of
@@ -130,24 +144,25 @@ class SystemTreeNode(object):
                 subtreeChanged |= isPruned
                 subtreeSize += childSize
                 subtreeNodes += childNodes
-            if subtreeChanged or self.lastState == self.DIRECTLY_EXCLUDED:
+            if (subtreeChanged or
+                    self._currentExclusionState == self.DIRECTLY_EXCLUDED):
                 # Little hack: Compare the original size of the node
                 # with the size of the pruned subtree to understand
                 # whether the subtree changed because some nodes match
                 # the cutPath function or because no nodes match the
                 # filters anymore (e.g., a filter is removed)!
-                if self.size == subtreeSize:
-                    self.lastState = self.FULLY_INCLUDED
+                if self._subtreeTotalSize == subtreeSize:
+                    self._currentExclusionState = self.FULLY_INCLUDED
                     self._visibilityChanged(self.FULLY_INCLUDED, subtreeSize)
                 else:
-                    self.lastState = self.PARTIALLY_INCLUDED
+                    self._currentExclusionState = self.PARTIALLY_INCLUDED
                     self._visibilityChanged(self.PARTIALLY_INCLUDED, subtreeSize)
             return (subtreeChanged, subtreeSize, subtreeNodes)
-        if self.lastState != self.FULLY_INCLUDED:
-            self.lastState = self.FULLY_INCLUDED
-            self._visibilityChanged(self.FULLY_INCLUDED, self.size)
-            return (True, self.size, 1)
-        return (False, self.size, 1)
+        if self._currentExclusionState != self.FULLY_INCLUDED:
+            self._currentExclusionState = self.FULLY_INCLUDED
+            self._visibilityChanged(self.FULLY_INCLUDED, self._subtreeTotalSize)
+            return (True, self._subtreeTotalSize, 1)
+        return (False, self._subtreeTotalSize, 1)
 
     def update(self, parentPath, cutPath):
         """ Compute the size (in bytes and in number of tree nodes) of
@@ -155,38 +170,6 @@ class SystemTreeNode(object):
         """
         modified, totalSize, totalNodes = self._update(parentPath, cutPath)
         return (totalSize, totalNodes)
-
-    @staticmethod
-    def _createSystemTreeRecursive2(rootPath):
-        """Recursivly create a SystemTreeNode tree depicting
-        the file system footed in rootPath. Use os.fwalk.
-        """
-        # rootFolder must be an absolute path
-        head, tail = os.path.split(rootPath)
-        currentRoot = SystemTreeNode(tail)
-        nodesInSubtree = 0
-        try:
-            for root, dirs, files, rootfd in os.fwalk(rootPath):
-                while dirs:
-                    # Important: remove dir from dirs, so that fwalk will not
-                    # inspect it in this recursion!
-                    folder = dirs.pop()
-                    dirPath = os.path.join(rootPath, folder)
-                    path, count = SystemTreeNode._createSystemTreeRecursive2(dirPath)
-                    currentRoot.addChild(path)
-                    nodesInSubtree += (count + 1)
-                for file in files:
-                    try:
-                        stat = os.stat(file, dir_fd=rootfd, follow_symlinks=False)
-                        child = SystemTreeNode(file, stat.st_size)
-                        currentRoot.addChild(child)
-                        nodesInSubtree += 1
-                    except EnvironmentError as err:
-                        print("WARNING: {} in {}".format(err, root))
-        except PermissionError as err:
-            print("WARNING 2: {} in {}".format(err, rootPath))
-            currentRoot.name = "[DENIED]" + currentRoot.name
-        return (currentRoot, nodesInSubtree)
 
     @staticmethod
     def _createSystemTreeRecursive(rootPath):
@@ -197,15 +180,19 @@ class SystemTreeNode(object):
         head, tail = os.path.split(rootPath)
         currentRoot = SystemTreeNode(tail)
         nodesInSubtree = 0
-        for entry in os.scandir(rootPath):
-            if entry.is_dir(follow_symlinks=False):
-                path, count = SystemTreeNode._createSystemTreeRecursive(entry.path)
-                currentRoot.addChild(path)
-                nodesInSubtree += (count + 1)
-            elif entry.is_file(follow_symlinks=False):
-                child = SystemTreeNode(entry.name, entry.stat().st_size)
-                currentRoot.addChild(child)
-                nodesInSubtree += 1
+        try:
+            for entry in os.scandir(rootPath):
+                if entry.is_dir(follow_symlinks=False):
+                    path, count = SystemTreeNode._createSystemTreeRecursive(entry.path)
+                    currentRoot.addChild(path)
+                    nodesInSubtree += (count + 1)
+                elif entry.is_file(follow_symlinks=False):
+                    child = SystemTreeNode(entry.name, entry.stat().st_size)
+                    currentRoot.addChild(child)
+                    nodesInSubtree += 1
+        except OSError as err:
+            print("WARNING: {} in {}".format(err, rootPath))
+            currentRoot._name = "[DENIED]" + currentRoot._name
         return (currentRoot, nodesInSubtree)
 
     @staticmethod

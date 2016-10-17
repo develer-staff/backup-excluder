@@ -23,7 +23,7 @@ class TestSystemTreeNode(unittest.TestCase):
             "4": SystemTreeNode("4", 4)})
 
     def _test_addChild_params(self, parent, child):
-        self.assertEqual(child.parent(), parent)
+        self.assertEqual(child.parent, parent)
         self.assertTrue(child.name in parent.children)
         self.assertEqual(parent.children[child.name], child)
 
@@ -31,16 +31,16 @@ class TestSystemTreeNode(unittest.TestCase):
         aNode = SystemTreeNode("aNode", 2)
         self.root.addChild(aNode)
         self._test_addChild_params(self.root, aNode)
-        self.assertEqual(self.root.size, 12)
+        self.assertEqual(self.root.subtreeTotalSize, 12)
 
     def test_addChild_near_leaf(self):
         aNode = SystemTreeNode("aNode", 10)
         n5 = self.root.getChild("6").getChild("5")
         n5.addChild(aNode)
         self._test_addChild_params(n5, aNode)
-        self.assertEqual(n5.size, 15)
-        self.assertEqual(n5.parent().size, 16)
-        self.assertEqual(self.root.size, 20)
+        self.assertEqual(n5.subtreeTotalSize, 15)
+        self.assertEqual(n5.parent.subtreeTotalSize, 16)
+        self.assertEqual(self.root.subtreeTotalSize, 20)
 
     def test_addChild_add_tree(self):
         tree = SystemTreeNode("60", 0, children={
@@ -51,9 +51,9 @@ class TestSystemTreeNode(unittest.TestCase):
         n5 = self.root.getChild("6").getChild("5")
         n5.addChild(tree)
         self._test_addChild_params(n5, tree)
-        self.assertEqual(n5.size, 65)
-        self.assertEqual(n5.parent().size, 66)
-        self.assertEqual(self.root.size, 70)
+        self.assertEqual(n5.subtreeTotalSize, 65)
+        self.assertEqual(n5.parent.subtreeTotalSize, 66)
+        self.assertEqual(self.root.subtreeTotalSize, 70)
 
     def test_addChild_fake(self):
         fakeNode = {'name': 'bNode', 'size': 1}

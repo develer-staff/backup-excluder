@@ -33,6 +33,10 @@ def hack_for_reactive_gui():
         QCoreApplication.processEvents()
 
 
+def matchNothing(ignored):
+    return False
+
+
 class SystemTreeWidgetNode(QTreeWidgetItem):
 
     percentTemplate = "{:.1%}"
@@ -45,7 +49,7 @@ class SystemTreeWidgetNode(QTreeWidgetItem):
     def __init__(self, parent, data):
         super().__init__(parent)
         self.setText(0, data.name)
-        self.uncutSize = data.size
+        self.uncutSize = data.subtreeTotalSize
         self.setText(1, humanize_bytes(self.uncutSize))
         self.setText(2, SystemTreeWidgetNode.percentTemplate.format(1))
         self.setText(3, humanize_bytes(self.uncutSize))
@@ -257,7 +261,6 @@ class BackupExcluderWindow(QMainWindow):
     def _createSystemTreeAsyncStart(self, initialPath):
         self._notifyStatus(waitStatus1)
         self._setOutputEnabled(False)
-        del self.root
         self._clear_widgets()
         worker = WorkerThread(self, initialPath)
         worker.start()
@@ -268,19 +271,14 @@ class BackupExcluderWindow(QMainWindow):
         self._notifyStatus(waitStatus3)
         self._listen_for_excluded_paths(self.root)
         self._update_basePath(self.basePath)
-        self._notifyBackupStatus(self.root.size, self.totalNodes)
+        self._notifyBackupStatus(self.root.subtreeTotalSize, self.totalNodes)
         self._setOutputEnabled(True)
 
     def _selectRootFolder(self):
-        fileDialog = QFileDialog(self)
-        fileDialog.setFileMode(QFileDialog.DirectoryOnly)
-        newRootFolder = ""
-        if fileDialog.exec():
-            newRootFolder = fileDialog.selectedFiles()
-            if len(newRootFolder) != 1:
-                self._notifyStatus("Only one folder can be selected as root.")
-                return False
-            self._createSystemTree(newRootFolder[0])
+        newRootFolder = QFileDialog.getExistingDirectory(
+            self, "Select Root Directory", None, QFileDialog.ShowDirsOnly)
+        if newRootFolder:
+            self._createSystemTree(newRootFolder)
             return True
         return False
 
@@ -325,14 +323,18 @@ class BackupExcluderWindow(QMainWindow):
 
     def applyFilters(self, sender):
         self._notifyStatus("Please wait...applying filters.")
-        filters = filter(str.strip, self.edit.document().toPlainText().split("\n"))
-        filterExpr = '(' + '|'.join(filters) + ')'
-        if filterExpr == "()":
-            filterExpr = "^$"
-        cutFunction = re.compile(filterExpr).match
+        self.confirm.setEnabled(False)
         self.output.document().clear()
+        text = self.edit.document().toPlainText()
+        filters = list(filter(str.strip, text.split("\n")))
+        if len(filters) > 0:
+            filterExpr = '(' + '|'.join(filters) + ')'
+            cutFunction = re.compile(filterExpr).match
+        else:
+            cutFunction = matchNothing
         base = self.basePath if self.matchRoot else ""
         finalSize, nodesCount = self.root.update(base, cutFunction)
+        self.confirm.setEnabled(True)
         self._notifyBackupStatus(finalSize, nodesCount)
 
 
