@@ -25,13 +25,6 @@ waitStatus3 = "Please wait...connecting the tree. It may take a while."
 toggleMatchRootStatus = """Switched to {0}match root path.
  Views are NOT updated. Apply filters again."""
 
-count = 0
-def hack_for_reactive_gui():
-    global count
-    count += 1
-    if not (count & 0x3F):
-        QCoreApplication.processEvents()
-
 
 def matchNothing(ignored):
     return False
@@ -75,10 +68,10 @@ class SystemTreeWidgetNode(QTreeWidgetItem):
 
     @staticmethod
     def fromSystemTree(parent, data):
-        hack_for_reactive_gui()
         root = SystemTreeWidgetNode(parent, data)
         for node in sorted(data.children):
             SystemTreeWidgetNode.fromSystemTree(root, data.getChild(node))
+        QCoreApplication.processEvents()
         return root
 
 
