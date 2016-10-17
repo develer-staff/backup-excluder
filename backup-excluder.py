@@ -6,13 +6,24 @@ import re
 import os
 import threading
 
-from PyQt5.QtWidgets import QApplication, QMainWindow, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QPushButton, QWidget, QPlainTextEdit, QSplitter, QTextEdit, QAction, QToolBar, QFileDialog, QLabel, QApplication
+from PyQt5.QtWidgets import QApplication, QMainWindow, QTreeWidget, \
+    QTreeWidgetItem, QVBoxLayout, QPushButton, QWidget, QPlainTextEdit, \
+    QSplitter, QTextEdit, QAction, QToolBar, QFileDialog, QLabel
 from PyQt5.QtGui import QBrush, QColor, QIcon
-from PyQt5.QtCore import QThread, QObject, pyqtSignal, QCoreApplication
+from PyQt5.QtCore import QObject, pyqtSignal, QCoreApplication
 
 from model import SystemTreeNode, removePrefix
 from scripts.dirsize import humanize_bytes
 
+
+filterLabelStatic = "<strong>Filters list</strong><br/>Regex accepted<br/>"
+filterLabelDynamic = """<span style='color:red'><em>Matching starts from
+ the root path</em></span>"""
+waitStatus1 = "Please wait...reading file system. It may take a while."
+waitStatus2 = "Please wait...populating the tree. It may take a while."
+waitStatus3 = "Please wait...connecting the tree. It may take a while."
+toggleMatchRootStatus = """Switched to {0}match root path.
+ Views are NOT updated. Apply filters again."""
 
 count = 0
 def hack_for_reactive_gui():
@@ -22,9 +33,9 @@ def hack_for_reactive_gui():
         QCoreApplication.processEvents()
 
 
-class ExampleItem(QTreeWidgetItem):
+class SystemTreeWidgetNode(QTreeWidgetItem):
 
-    percentFormat = "{:.1%}"
+    percentTemplate = "{:.1%}"
     brushes = {
         SystemTreeNode.DIRECTLY_EXCLUDED: QBrush(QColor("orange")),
         SystemTreeNode.PARTIALLY_INCLUDED: QBrush(QColor("yellow")),
@@ -36,7 +47,7 @@ class ExampleItem(QTreeWidgetItem):
         self.setText(0, data.name)
         self.uncutSize = data.size
         self.setText(1, humanize_bytes(self.uncutSize))
-        self.setText(2, ExampleItem.percentFormat.format(1))
+        self.setText(2, SystemTreeWidgetNode.percentTemplate.format(1))
         self.setText(3, humanize_bytes(self.uncutSize))
         data.visibilityChangedHandler = self._update_visibility
 
@@ -50,9 +61,10 @@ class ExampleItem(QTreeWidgetItem):
         ratio = float(actualSize)/max([self.uncutSize, 1.0])
         self._colorBackground(self.brushes[exclusionState])
         self.setText(1, humanize_bytes(actualSize))
-        self.setText(2, ExampleItem.percentFormat.format(ratio))
+        self.setText(2, SystemTreeWidgetNode.percentTemplate.format(ratio))
         if exclusionState == SystemTreeNode.DIRECTLY_EXCLUDED:
-            # we update all the children because the model won't inspect them
+            # Update all the descendant children because the model won't
+            # send any event/call any callback for these nodes.
             for i in range(0, self.childCount()):
                 self.child(i)._update_visibility(exclusionState, 0)
         QCoreApplication.processEvents()
@@ -60,13 +72,14 @@ class ExampleItem(QTreeWidgetItem):
     @staticmethod
     def fromSystemTree(parent, data):
         hack_for_reactive_gui()
-        root = ExampleItem(parent, data)
+        root = SystemTreeWidgetNode(parent, data)
         for node in sorted(data.children):
-            ExampleItem.fromSystemTree(root, data.getChild(node))
+            SystemTreeWidgetNode.fromSystemTree(root, data.getChild(node))
         return root
 
 
 class WorkerThread(threading.Thread):
+
     def __init__(self, mainThread, initialPath):
         super().__init__()
         self.mainThread = mainThread
@@ -81,6 +94,7 @@ class WorkerThread(threading.Thread):
 
 
 class WorkerObject(QObject):
+
     workFinished = pyqtSignal()
 
     def __init__(self, parent):
@@ -95,14 +109,15 @@ class WorkerObject(QObject):
         self.workFinished.emit()
 
 
-class Example(QMainWindow):
+class BackupExcluderWindow(QMainWindow):
+
     startWork = pyqtSignal(str)
 
     def __init__(self, initialPath):
         super().__init__()
-        self.customInit(initialPath)
+        self._customInit(initialPath)
 
-    def customInit(self, initialPath):
+    def _customInit(self, initialPath):
         self.basePath = ""
         self.root = None
         self.totalNodes = 0
@@ -119,10 +134,9 @@ class Example(QMainWindow):
 
         self.rootFolderDisplay = QLabel()
 
-        self.infolabel = QLabel("""<strong>Filters list</strong><br/>
-            Regex accepted<br/>""")
+        self.infolabel = QLabel(filterLabelStatic)
         self.infolabel.setWordWrap(True)
-        self.matchRootLabel = QLabel("<span style='color:red'><em>Matching starts from the root path</em></span>")
+        self.matchRootLabel = QLabel(filterLabelDynamic)
         self.matchRootLabel.setWordWrap(True)
         self.matchRootLabel.setVisible(self.matchRoot)
 
@@ -154,7 +168,7 @@ class Example(QMainWindow):
         splitter.setStretchFactor(0, 3)
         splitter.setStretchFactor(1, 1)
 
-        self.initToolBar()
+        self._initToolBar()
 
         self.statusBar()
         self.setCentralWidget(splitter)
@@ -163,30 +177,36 @@ class Example(QMainWindow):
         self.show()
         self._createSystemTree(initialPath)
 
-    def initToolBar(self):
+    def _initToolBar(self):
 
         openIcon = QIcon.fromTheme("folder-open")
-        openAction = QAction(openIcon, "Select root folder", self)
+        openAction = QAction(
+            openIcon, "Select root folder", self)
         openAction.triggered.connect(self._selectRootFolder)
 
         saveIcon = QIcon.fromTheme("document-save")
-        saveAction = QAction(saveIcon, "Save excluded paths", self)
+        saveAction = QAction(
+            saveIcon, "Save excluded paths", self)
         saveAction.triggered.connect(self._saveToFile)
 
         refreshIcon = QIcon.fromTheme("view-refresh")
-        refreshAction = QAction(refreshIcon, "Refresh from file system", self)
+        refreshAction = QAction(
+            refreshIcon, "Refresh from file system", self)
         refreshAction.triggered.connect(self._refreshFileSystem)
 
         treeviewIcon = QIcon.fromTheme("format-indent-more")
-        treeviewAction = QAction(treeviewIcon, "File system tree view", self, checkable=True)
+        treeviewAction = QAction(
+            treeviewIcon, "File system tree view", self, checkable=True)
         treeviewAction.triggered.connect(self._showTreeView)
 
         listviewIcon = QIcon.fromTheme("format-justify-fill")
-        listviewAction = QAction(listviewIcon, "Excluded paths list view", self, checkable=True)
+        listviewAction = QAction(
+            listviewIcon, "Excluded paths list view", self, checkable=True)
         listviewAction.triggered.connect(self._showListView)
 
         matchFromRootIcon = QIcon.fromTheme("tools-check-spelling")
-        matchFromRootAction = QAction(matchFromRootIcon, "Match also root path", self, checkable=True)
+        matchFromRootAction = QAction(
+            matchFromRootIcon, "Match also root path", self, checkable=True)
         matchFromRootAction.triggered.connect(self._toggle_match_root)
 
         manageToolBar = QToolBar()
@@ -208,7 +228,8 @@ class Example(QMainWindow):
         self.refresh = refreshAction
 
     def _update_basePath(self, path):
-        self.rootFolderDisplay.setText("root path: <strong>" + path + "</strong>")
+        labelText = "root path: <strong>" + path + "</strong>"
+        self.rootFolderDisplay.setText(labelText)
 
     def _notifyStatus(self, message):
         self.statusBar().showMessage(message)
@@ -232,20 +253,9 @@ class Example(QMainWindow):
 
     def _createSystemTree(self, initialPath):
         self._createSystemTreeAsyncStart(initialPath)
-        return
-        self._notifyStatus("Please wait...reading file system. It may take a while.")
-        self._setOutputEnabled(False)
-        del self.root
-        self._clear_widgets()
-        self.basePath, self.root, self.totalNodes = SystemTreeNode.createSystemTree(initialPath)
-        ExampleItem.fromSystemTree(self.tree, self.root)
-        self._update_basePath(self.basePath)
-        self._listen_for_excluded_paths(self.root)
-        self._notifyBackupStatus(self.root.size, self.totalNodes)
-        self._setOutputEnabled(True)
 
     def _createSystemTreeAsyncStart(self, initialPath):
-        self._notifyStatus("Please wait...reading file system. It may take a while.")
+        self._notifyStatus(waitStatus1)
         self._setOutputEnabled(False)
         del self.root
         self._clear_widgets()
@@ -253,7 +263,9 @@ class Example(QMainWindow):
         worker.start()
 
     def _createSystemTreeAsyncEnd(self):
-        ExampleItem.fromSystemTree(self.tree, self.root)
+        self._notifyStatus(waitStatus2)
+        SystemTreeWidgetNode.fromSystemTree(self.tree, self.root)
+        self._notifyStatus(waitStatus3)
         self._listen_for_excluded_paths(self.root)
         self._update_basePath(self.basePath)
         self._notifyBackupStatus(self.root.size, self.totalNodes)
@@ -301,7 +313,7 @@ class Example(QMainWindow):
         self.matchRoot = not self.matchRoot
         self.matchRootLabel.setVisible(self.matchRoot)
         matching = "" if self.matchRoot else "NOT "
-        self._notifyStatus("Switched to "+matching+"match root path. Views are NOT updated. Apply filters again.")
+        self._notifyStatus(toggleMatchRootStatus.format(matching))
 
     def _manageExcludedPath(self, newPath):
         self.output.append(removePrefix(newPath, self.basePath))
@@ -331,7 +343,7 @@ def main():
     args = parser.parse_args()
 
     app = QApplication(sys.argv)
-    window = Example(args.start)
+    window = BackupExcluderWindow(args.start)
     retVal = app.exec_()
     del window
     del app
