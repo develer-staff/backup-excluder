@@ -19,6 +19,8 @@ from scripts.dirsize import humanize_bytes
 infoLabelText = "<strong>Filters list</strong><br/>Regex accepted<br/>"
 matchRootLabelText = """<span style='color:red'><em>Matching also root
 path</em></span>"""
+filtersErrorText = """ERROR while compiling filters.
+Make sure they are valid regular expression."""
 filtersValidLabelText = """<span style='color:#666'><em>
 Filters are not applyed</em>"""
 waitStatus1 = "Please wait...reading file system. It may take a while."
@@ -339,7 +341,6 @@ class BackupExcluderWindow(QMainWindow):
 
     def applyFilters(self, sender):
         self._notifyStatus("Please wait...applying filters.")
-        self.confirm.setEnabled(False)
         self.output.document().clear()
         text = self.edit.document().toPlainText()
         self.settings.setValue("editor/filters", text)
@@ -350,10 +351,15 @@ class BackupExcluderWindow(QMainWindow):
             else:
                 base = self.basePath + os.sep
             filterExpr = base + '(' + '|'.join(filters) + ')'
-            cutFunction = re.compile(filterExpr).match
+            try:
+                cutFunction = re.compile(filterExpr).match
+            except Exception:
+                self._notifyStatus(filtersErrorText)
+                return
         else:
             cutFunction = matchNothing
         hiddenPath = os.path.dirname(self.basePath)
+        self.confirm.setEnabled(False)
         finalSize, nodesCount = self.root.update(hiddenPath, cutFunction)
         self.filtersValidLabel.setVisible(False)
         self.confirm.setEnabled(True)
