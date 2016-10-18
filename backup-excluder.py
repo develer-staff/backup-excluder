@@ -46,10 +46,11 @@ class SystemTreeWidgetNode(QTreeWidgetItem):
     def __init__(self, parent, data):
         super().__init__(parent)
         self.setText(0, data.name)
-        self.uncutSize = data.subtreeTotalSize
-        self.setText(1, humanize_bytes(self.uncutSize))
+        self._uncutSize = data.subtreeTotalSize
+        self._cutSize = data.subtreeTotalSize
+        self.setText(1, humanize_bytes(self._cutSize))
         self.setText(2, SystemTreeWidgetNode.percentTemplate.format(1))
-        self.setText(3, humanize_bytes(self.uncutSize))
+        self.setText(3, humanize_bytes(self._uncutSize))
         data.visibilityChangedHandler = self._update_visibility
 
     def _colorBackground(self, brush):
@@ -59,7 +60,8 @@ class SystemTreeWidgetNode(QTreeWidgetItem):
         self.setBackground(3, brush)
 
     def _update_visibility(self, exclusionState, actualSize):
-        ratio = float(actualSize)/max([self.uncutSize, 1.0])
+        self._cutSize = actualSize
+        ratio = float(actualSize)/max([self._uncutSize, 1.0])
         self._colorBackground(self.brushes[exclusionState])
         self.setText(1, humanize_bytes(actualSize))
         self.setText(2, SystemTreeWidgetNode.percentTemplate.format(ratio))
@@ -70,10 +72,23 @@ class SystemTreeWidgetNode(QTreeWidgetItem):
                 self.child(i)._update_visibility(exclusionState, 0)
         QCoreApplication.processEvents()
 
+    def __lt__(self, other):
+        col = self.treeWidget().sortColumn()
+        if col == 1:
+            return self._cutSize < other._cutSize
+        elif col == 2:
+            selfPercentage = float(self.text(2).strip("%"))
+            otherPercentage = float(other.text(2).strip("%"))
+            return selfPercentage < otherPercentage
+        elif col == 3:
+            return self._uncutSize < other._uncutSize
+        else:
+            return super().__lt__(other)
+
     @staticmethod
     def fromSystemTree(parent, data):
         root = SystemTreeWidgetNode(parent, data)
-        for node in sorted(data.children):
+        for node in data.children:
             SystemTreeWidgetNode.fromSystemTree(root, data.getChild(node))
         QCoreApplication.processEvents()
         return root
@@ -284,7 +299,9 @@ class BackupExcluderWindow(QMainWindow):
 
     def _createSystemTreeAsyncEnd(self):
         self._notifyStatus(waitStatus2)
+        self.tree.setSortingEnabled(False)
         SystemTreeWidgetNode.fromSystemTree(self.tree, self.root)
+        self.tree.setSortingEnabled(True)
         self._notifyStatus(waitStatus3)
         self._listen_for_excluded_paths(self.root)
         self._update_basePath(self.basePath + os.sep)
