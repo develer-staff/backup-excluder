@@ -128,7 +128,7 @@ class SystemTreeNode(object):
                 # This node must be cut -> all the subtree will be cut:
                 # update the state of the whole subtree without calling
                 # the callback for every node. The GUI must take care of
-                # updating the whole subtree.
+                # updating (visually) the whole subtree.
                 # FIXME: we assume the regular expression do not
                 # use exclusion sintax, e.g., [^a-z]
                 self._set_exclusion_state_recursive(self.DIRECTLY_EXCLUDED)
@@ -176,9 +176,8 @@ class SystemTreeNode(object):
         """Recursivly create a SystemTreeNode tree depicting
         the file system footed in rootPath. Use os.scandir.
         """
-        # rootFolder must be an absolute path
-        head, tail = os.path.split(rootPath)
-        currentRoot = SystemTreeNode(tail)
+        # rootPath must be an absolute path
+        currentRoot = SystemTreeNode(os.path.basename(rootPath))
         nodesInSubtree = 0
         try:
             for entry in os.scandir(rootPath):
@@ -201,7 +200,6 @@ class SystemTreeNode(object):
         rootFolder as a SystemTreeNode tree and the prefix of the
         rootFolder in the file system.
         """
-        rootPath = os.path.abspath(rootFolder)
-        head, tail = os.path.split(rootPath)
-        root, nodesCount = SystemTreeNode._createSystemTreeRecursive(rootPath)
-        return (head, root, nodesCount + 1)
+        absPath = os.path.abspath(rootFolder)
+        root, nodesCount = SystemTreeNode._createSystemTreeRecursive(absPath)
+        return (absPath, root, nodesCount + 1)

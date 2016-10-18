@@ -17,8 +17,8 @@ from scripts.dirsize import humanize_bytes
 
 
 filterLabelStatic = "<strong>Filters list</strong><br/>Regex accepted<br/>"
-filterLabelDynamic = """<span style='color:red'><em>Matching starts from
- the root path</em></span>"""
+filterLabelDynamic = """<span style='color:red'><em>Matching also root
+path</em></span>"""
 waitStatus1 = "Please wait...reading file system. It may take a while."
 waitStatus2 = "Please wait...populating the tree. It may take a while."
 waitStatus3 = "Please wait...connecting the tree. It may take a while."
@@ -83,11 +83,11 @@ class WorkerThread(threading.Thread):
         self.initialPath = initialPath
 
     def run(self):
+        callback = self.mainThread._createSystemTreeAsyncEnd
         workerObject = WorkerObject(self.mainThread)
         workerObject.moveToThread(QApplication.instance().thread())
-        workerObject.workFinished.connect(self.mainThread._createSystemTreeAsyncEnd)
+        workerObject.workFinished.connect(callback)
         workerObject.doWork(self.initialPath)
-        return
 
 
 class WorkerObject(QObject):
@@ -263,7 +263,7 @@ class BackupExcluderWindow(QMainWindow):
         SystemTreeWidgetNode.fromSystemTree(self.tree, self.root)
         self._notifyStatus(waitStatus3)
         self._listen_for_excluded_paths(self.root)
-        self._update_basePath(self.basePath)
+        self._update_basePath(self.basePath + os.sep)
         self._notifyBackupStatus(self.root.subtreeTotalSize, self.totalNodes)
         self._setOutputEnabled(True)
 
@@ -285,8 +285,7 @@ class BackupExcluderWindow(QMainWindow):
             f.write(self.output.document().toPlainText())
 
     def _refreshFileSystem(self):
-        initialPath = os.path.join(self.basePath, self.root.name)
-        self._createSystemTree(initialPath)
+        self._createSystemTree(self.basePath)
 
     def _showTreeView(self):
         self.tree.setVisible(True)
@@ -307,7 +306,7 @@ class BackupExcluderWindow(QMainWindow):
         self._notifyStatus(toggleMatchRootStatus.format(matching))
 
     def _manageExcludedPath(self, newPath):
-        self.output.append(removePrefix(newPath, self.basePath))
+        self.output.append(newPath)
 
     def _listen_for_excluded_paths(self, root):
         root.excludedPathFoundHandler = self._manageExcludedPath
@@ -321,12 +320,16 @@ class BackupExcluderWindow(QMainWindow):
         text = self.edit.document().toPlainText()
         filters = list(filter(str.strip, text.split("\n")))
         if len(filters) > 0:
-            filterExpr = '(' + '|'.join(filters) + ')'
+            if self.matchRoot:
+                base = ""
+            else:
+                base = self.basePath + os.sep
+            filterExpr = base + '(' + '|'.join(filters) + ')'
             cutFunction = re.compile(filterExpr).match
         else:
             cutFunction = matchNothing
-        base = self.basePath if self.matchRoot else ""
-        finalSize, nodesCount = self.root.update(base, cutFunction)
+        hiddenPath = os.path.dirname(self.basePath)
+        finalSize, nodesCount = self.root.update(hiddenPath, cutFunction)
         self.confirm.setEnabled(True)
         self._notifyBackupStatus(finalSize, nodesCount)
 
