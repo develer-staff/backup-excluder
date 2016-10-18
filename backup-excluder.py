@@ -6,9 +6,10 @@ import re
 import os
 import threading
 
-from PyQt5.QtWidgets import QApplication, QMainWindow, QTreeWidget, \
-    QTreeWidgetItem, QVBoxLayout, QPushButton, QWidget, QPlainTextEdit, \
-    QSplitter, QTextEdit, QAction, QToolBar, QFileDialog, QLabel
+from PyQt5.QtWidgets import (
+    QApplication, QMainWindow, QTreeWidget, QTreeWidgetItem, QVBoxLayout,
+    QPushButton, QWidget, QPlainTextEdit, QSplitter, QTextEdit, QAction,
+    QToolBar, QFileDialog, QLabel, QMenu, QAbstractItemView)
 from PyQt5.QtGui import QBrush, QColor, QIcon
 from PyQt5.QtCore import QObject, pyqtSignal, QCoreApplication, QSettings
 
@@ -53,6 +54,19 @@ class SystemTreeWidgetNode(QTreeWidgetItem):
         self.setText(3, humanize_bytes(self._uncutSize))
         data.visibilityChangedHandler = self._update_visibility
 
+    def __lt__(self, other):
+        col = self.treeWidget().sortColumn()
+        if col == 1:
+            return self._cutSize < other._cutSize
+        elif col == 2:
+            selfPercentage = float(self.text(2).strip("%"))
+            otherPercentage = float(other.text(2).strip("%"))
+            return selfPercentage < otherPercentage
+        elif col == 3:
+            return self._uncutSize < other._uncutSize
+        else:
+            return super().__lt__(other)
+
     def _colorBackground(self, brush):
         self.setBackground(0, brush)
         self.setBackground(1, brush)
@@ -72,18 +86,13 @@ class SystemTreeWidgetNode(QTreeWidgetItem):
                 self.child(i)._update_visibility(exclusionState, 0)
         QCoreApplication.processEvents()
 
-    def __lt__(self, other):
-        col = self.treeWidget().sortColumn()
-        if col == 1:
-            return self._cutSize < other._cutSize
-        elif col == 2:
-            selfPercentage = float(self.text(2).strip("%"))
-            otherPercentage = float(other.text(2).strip("%"))
-            return selfPercentage < otherPercentage
-        elif col == 3:
-            return self._uncutSize < other._uncutSize
-        else:
-            return super().__lt__(other)
+    def getFullPath(self):
+        node = self.parent()
+        result = self.text(0)
+        while isinstance(node, QTreeWidgetItem):
+            result = os.path.join(node.text(0), result)
+            node = node.parent()
+        return result
 
     @staticmethod
     def fromSystemTree(parent, data):
@@ -151,6 +160,8 @@ class BackupExcluderWindow(QMainWindow):
         self.tree.setColumnCount(4)
         self.tree.setHeaderLabels(["File System", "Size", "%", "Uncut Size"])
         self.tree.header().resizeSection(0, 250)
+        self.tree.setEnabled(False)
+        self.tree.setSelectionMode(QAbstractItemView.ExtendedSelection)
 
         self.output = QTextEdit()
         self.output.setReadOnly(True)
@@ -245,6 +256,11 @@ class BackupExcluderWindow(QMainWindow):
         matchFromRootAction.setChecked(self.matchRoot)
         matchFromRootAction.triggered.connect(self._toggle_match_root)
 
+        excludeFolderIcon = QIcon.fromTheme("user-trash")
+        excludeFolderAction = QAction(
+            excludeFolderIcon, "Exclude item", self)
+        excludeFolderAction.triggered.connect(self._exclude_item)
+
         manageToolBar = QToolBar()
         manageToolBar.addAction(openAction)
         manageToolBar.addAction(saveAction)
@@ -262,6 +278,36 @@ class BackupExcluderWindow(QMainWindow):
         self.save = saveAction
         self.open = openAction
         self.refresh = refreshAction
+        self.exclude = excludeFolderAction
+
+    def _exclude_item(self, boh):
+        if self.matchRoot:
+            basePath = self.basePath
+        else:
+            basePath = ""
+        items = self.tree.selectedItems()
+        for item in items:
+            treePath = item.getFullPath()
+            # we want to remove the root from the path, because it is
+            # not used for matching. +1 becasue of the separator.
+            if treePath.startswith(self.root.name):
+                treePath = treePath[len(self.root.name)+1:]
+            path = os.path.join(basePath, treePath)
+            self.edit.appendPlainText(path)
+        self.applyFilters(None)
+
+    def contextMenuEvent(self, event):
+        if event.reason() == event.Mouse:
+            pos = event.globalPos()
+            item = self.tree.selectedItems()
+            if not item:
+                return
+        else:
+            return
+        contextMenu = QMenu(self.tree)
+        contextMenu.addAction(self.exclude)
+        contextMenu.popup(pos)
+        event.accept()
 
     def _update_basePath(self, path, moreInfo=""):
         labelText = "root path: <strong>" + path + "</strong>" + moreInfo
@@ -302,6 +348,7 @@ class BackupExcluderWindow(QMainWindow):
         self.tree.setSortingEnabled(False)
         SystemTreeWidgetNode.fromSystemTree(self.tree, self.root)
         self.tree.setSortingEnabled(True)
+        self.tree.expandToDepth(0)
         self._notifyStatus(waitStatus3)
         self._listen_for_excluded_paths(self.root)
         self._update_basePath(self.basePath + os.sep)
@@ -323,7 +370,7 @@ class BackupExcluderWindow(QMainWindow):
             "Paths excluded list (*.pel);;All Files (*)")
         if not fileName:
             return False
-        with open(fileName[0], "w+") as f:
+        with open(fileName, "w+") as f:
             f.write(self.output.document().toPlainText())
 
     def _refreshFileSystem(self):
