@@ -31,16 +31,16 @@ class TestSystemTreeNode(unittest.TestCase):
         aNode = SystemTreeNode("aNode", 2)
         self.root.addChild(aNode)
         self._test_addChild_params(self.root, aNode)
-        self.assertEqual(self.root.size, 12)
+        self.assertEqual(self.root.subtreeTotalSize, 12)
 
     def test_addChild_near_leaf(self):
         aNode = SystemTreeNode("aNode", 10)
         n5 = self.root.getChild("6").getChild("5")
         n5.addChild(aNode)
         self._test_addChild_params(n5, aNode)
-        self.assertEqual(n5.size, 15)
-        self.assertEqual(n5.parent.size, 16)
-        self.assertEqual(self.root.size, 20)
+        self.assertEqual(n5.subtreeTotalSize, 15)
+        self.assertEqual(n5.parent.subtreeTotalSize, 16)
+        self.assertEqual(self.root.subtreeTotalSize, 20)
 
     def test_addChild_add_tree(self):
         tree = SystemTreeNode("60", 0, children={
@@ -51,9 +51,9 @@ class TestSystemTreeNode(unittest.TestCase):
         n5 = self.root.getChild("6").getChild("5")
         n5.addChild(tree)
         self._test_addChild_params(n5, tree)
-        self.assertEqual(n5.size, 65)
-        self.assertEqual(n5.parent.size, 66)
-        self.assertEqual(self.root.size, 70)
+        self.assertEqual(n5.subtreeTotalSize, 65)
+        self.assertEqual(n5.parent.subtreeTotalSize, 66)
+        self.assertEqual(self.root.subtreeTotalSize, 70)
 
     def test_addChild_fake(self):
         fakeNode = {'name': 'bNode', 'size': 1}
@@ -62,33 +62,37 @@ class TestSystemTreeNode(unittest.TestCase):
 
     def test_update_mock_regex(self):
         # ignore cutFunction
-        fullsize = self.root.update("", lambda x: False)
+        fullsize, nodesCount = self.root.update("", lambda x: False)
         self.assertEqual(fullsize, 10)
-        nosize = self.root.update("", lambda x: True)
+        self.assertEqual(nodesCount, 7)
+        nosize, nodesCount = self.root.update("", lambda x: True)
         self.assertEqual(nosize, 0)
+        self.assertEqual(nodesCount, 0)
 
     def _test_perform_update_with_regex(self, node, parentPath,
-                                        regex, expectedResult):
-        result = node.update(parentPath, re.compile(regex).match)
-        self.assertEqual(result, expectedResult)
+                                        regex, expectedSize, expectedNodes):
+        result, nodes = node.update(parentPath, re.compile(regex).match)
+        self.assertEqual(result, expectedSize)
+        self.assertEqual(nodes, expectedNodes)
 
     def test_update_valid_regex(self):
         # supply cutFunction matching a leaf node
         expectedResult = 10 - 2
         self._test_perform_update_with_regex(self.root, "", "10/6/5/2",
-                                             expectedResult)
+                                             expectedResult, 6)
         # supply cutFunction matching a inner node
         expectedResult = 10 - (1 + 2 + 3)
         self._test_perform_update_with_regex(self.root, "", "10/6",
-                                             expectedResult)
+                                             expectedResult, 2)
 
     def test_update_parent_path(self):
         # supply an invalid parentPath
         self._test_perform_update_with_regex(self.root, "invalid/parent/path",
-                                             "10/6", 10)
+                                             "10/6", 10, 7)
         # supply a valid parentPath
         startingNode = self.root.getChild("6").getChild("5")
-        self._test_perform_update_with_regex(startingNode, "10/6", "10/6/5/3", 2)
+        self._test_perform_update_with_regex(startingNode, "10/6", "10/6/5/3",
+                                             2 ,2)
 
 
 if __name__ == '__main__':
