@@ -6,12 +6,17 @@ import re
 import os
 import threading
 
-from PyQt5.QtWidgets import (
-    QApplication, QMainWindow, QTreeWidget, QTreeWidgetItem, QVBoxLayout,
-    QPushButton, QWidget, QPlainTextEdit, QSplitter, QTextEdit, QAction,
-    QToolBar, QFileDialog, QLabel, QMenu, QAbstractItemView)
-from PyQt5.QtGui import QBrush, QColor, QIcon
-from PyQt5.QtCore import QObject, pyqtSignal, QCoreApplication, QSettings
+try:
+    from PyQt5.QtWidgets import (
+        QApplication, QMainWindow, QTreeWidget, QTreeWidgetItem, QVBoxLayout,
+        QPushButton, QWidget, QPlainTextEdit, QSplitter, QTextEdit, QAction,
+        QToolBar, QFileDialog, QLabel, QMenu, QAbstractItemView)
+    from PyQt5.QtGui import QBrush, QColor, QIcon
+    from PyQt5.QtCore import QObject, pyqtSignal, QCoreApplication, QSettings
+except ImportError:
+    print("Need PyQt5")
+    print("pip install backup_excluder[qt]")
+    raise
 
 from model import SystemTreeNode
 from scripts.dirsize import humanize_bytes
