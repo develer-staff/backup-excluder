@@ -39,10 +39,12 @@ backup program.""",
 
     py_modules=["backup_excluder", "model", "scripts.dirsize"],
 
+    data_files=[("", ["translation.qm"])],
+
     #install_requires=[],
 
     extras_require={
-       'qt': ['PyQt5']
+       "qt": ["PyQt5"]
     },
 
     entry_points={
