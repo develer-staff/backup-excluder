@@ -162,16 +162,16 @@ class BackupExcluderWindow(QMainWindow):
         self.tree.setColumnCount(4)
         self.tree.setHeaderLabels([
             self.tr("File System"),
-            self.tr("Size"),
+            self.tr("Backup Size"),
             "%",
-            self.tr("Uncut Size")])
+            self.tr("Full Size")])
         self.tree.header().resizeSection(0, 250)
         self.tree.setEnabled(False)
         self.tree.setSelectionMode(QAbstractItemView.ExtendedSelection)
 
         self.output = QTextEdit()
         self.output.setReadOnly(True)
-        self.output.setPlaceholderText(self.tr("No match"))
+        self.output.setPlaceholderText(self.tr("No paths matched"))
 
         self.rootFolderDisplay = QLabel()
 
@@ -223,7 +223,7 @@ class BackupExcluderWindow(QMainWindow):
 
         # initial visualization: no tree to avoid (possible) long wait,
         # display of initial path (with hint of refresh), disable filters
-        moreInfo = self.tr("Need refresh")
+        moreInfo = self.tr("(refresh to show tree)")
         self._update_basePath(self.basePath + os.sep, moreInfo)
         self.confirm.setEnabled(False)
 
@@ -233,32 +233,35 @@ class BackupExcluderWindow(QMainWindow):
 
         openIcon = QIcon.fromTheme("folder-open")
         openAction = QAction(
-            openIcon, self.tr("Select root"), self)
+            openIcon, self.tr("Select root folder"), self)
         openAction.triggered.connect(self._selectRootFolder)
 
         saveIcon = QIcon.fromTheme("document-save")
         saveAction = QAction(
-            saveIcon, self.tr("Save"), self)
+            saveIcon, self.tr("Save excluded paths"), self)
         saveAction.triggered.connect(self._saveToFile)
 
         refreshIcon = QIcon.fromTheme("view-refresh")
         refreshAction = QAction(
-            refreshIcon, self.tr("Refresh"), self)
+            refreshIcon, self.tr("Refresh from file system"), self)
         refreshAction.triggered.connect(self._refreshFileSystem)
 
         treeviewIcon = QIcon.fromTheme("format-indent-more")
         treeviewAction = QAction(
-            treeviewIcon, self.tr("Show tree"), self, checkable=True)
+            treeviewIcon, self.tr("File system tree view"),
+            self, checkable=True)
         treeviewAction.triggered.connect(self._showTreeView)
 
         listviewIcon = QIcon.fromTheme("format-justify-fill")
         listviewAction = QAction(
-            listviewIcon, self.tr("Show list"), self, checkable=True)
+            listviewIcon, self.tr("Excluded paths list view"),
+            self, checkable=True)
         listviewAction.triggered.connect(self._showListView)
 
         matchFromRootIcon = QIcon.fromTheme("tools-check-spelling")
         matchFromRootAction = QAction(
-            matchFromRootIcon, self.tr("Match root"), self, checkable=True)
+            matchFromRootIcon, self.tr("Include/exclude root path from match"),
+            self, checkable=True)
         matchFromRootAction.setChecked(self.matchRoot)
         matchFromRootAction.triggered.connect(self._toggle_match_root)
 
@@ -316,7 +319,7 @@ class BackupExcluderWindow(QMainWindow):
         event.accept()
 
     def _update_basePath(self, path, moreInfo=""):
-        labelText = self.tr("Root Path") + ": <strong>" + path + "</strong>"
+        labelText = self.tr("Root path") + ": <strong>" + path + "</strong>"
         if moreInfo:
             labelText += " <span style='color:red'>" + moreInfo + "</span>"
         self.rootFolderDisplay.setText(labelText)
@@ -327,7 +330,7 @@ class BackupExcluderWindow(QMainWindow):
     def _notifyBackupStatus(self, finalSize, usedNodes):
         self._notifyStatus("{}: {} ({}/{} {})".format(
             self.tr("Size"), humanize_bytes(finalSize), usedNodes,
-            self.totalNodes, self.tr("Items count")))
+            self.totalNodes, self.tr("Items to backup")))
 
     def _clear_widgets(self):
         self.tree.clear()
@@ -366,7 +369,7 @@ class BackupExcluderWindow(QMainWindow):
 
     def _selectRootFolder(self):
         newRootFolder = QFileDialog.getExistingDirectory(
-            self, self.tr("Select dir window title"),
+            self, self.tr("Select root directory"),
             None, QFileDialog.ShowDirsOnly)
         if newRootFolder:
             self.settings.setValue("config/basePath", newRootFolder)
@@ -376,7 +379,7 @@ class BackupExcluderWindow(QMainWindow):
 
     def _saveToFile(self):
         fileName, fileExtension = QFileDialog.getSaveFileName(
-            self, self.tr("Save file window title"), "",
+            self, self.tr("Save excluded paths list"), "",
             "Paths excluded list (*.pel);;All Files (*)")
         if not fileName:
             return False
@@ -417,7 +420,7 @@ class BackupExcluderWindow(QMainWindow):
             self._listen_for_excluded_paths(child)
 
     def applyFilters(self, sender):
-        self._notifyStatus(self.tr("Filtering"))
+        self._notifyStatus(self.tr("Please wait...applying filters. It may take a while."))
         self.output.document().clear()
         text = self.edit.document().toPlainText()
         self.settings.setValue("editor/filters", text)
@@ -447,27 +450,31 @@ def generateTranslations(app):
     global infoLabelText
     infoLabelText = "<strong>{}</strong><br/>{}".format(
         app.translate("BackupExcluderWindow", "Filters list"),
-        app.translate("BackupExcluderWindow", "Regex accepted"))
+        app.translate("BackupExcluderWindow", "Regex accepted."))
     global matchRootLabelText
     matchRootLabelText = "<span style='color:red'><em>{}</em></span>".format(
         app.translate("BackupExcluderWindow", "Matching also root path"))
     global filtersErrorText
-    filtersErrorText = app.translate("BackupExcluderWindow", "Regex error")
+    filtersErrorText = app.translate("BackupExcluderWindow",
+        "ERROR: bad format for regex.")
     global filtersValidLabelText
     filtersValidLabelText = "<span style='color:#666'><em>{}</em>".format(
         app.translate("BackupExcluderWindow", "Filters not applyed"))
     global waitStatus1
-    waitStatus1 = app.translate("BackupExcluderWindow", "Scanning file system")
+    waitStatus1 = app.translate("BackupExcluderWindow",
+        "Please wait...scanning file system. It may take a while.")
     global waitStatus2
-    waitStatus2 = app.translate("BackupExcluderWindow", "Creating view tree")
+    waitStatus2 = app.translate("BackupExcluderWindow",
+        "Please wait...populating tree view. It may take a while.")
     global waitStatus3
-    waitStatus3 = app.translate("BackupExcluderWindow", "Connecting tree")
+    waitStatus3 = app.translate("BackupExcluderWindow",
+        "Please wait...connecting tree view. It may take a while.")
     global toggleMatchRootStatusYes
     toggleMatchRootStatusYes = app.translate("BackupExcluderWindow",
-                                             "Toggled matching root yes")
+        "Switched to match root path. Views are NOT updated. Apply filters again.")
     global toggleMatchRootStatusNo
     toggleMatchRootStatusNo = app.translate("BackupExcluderWindow",
-                                            "Toggled matching root no")
+        "Switched to NOT match root path. Views are NOT updated. Apply filters again.")
 
 
 def main():
@@ -478,7 +485,6 @@ def main():
 
     app = QApplication(sys.argv)
     translator = QTranslator()
-    translator.load("translation.qm", ".")
     app.installTranslator(translator)
     generateTranslations(app)
     window = BackupExcluderWindow(args.start)
